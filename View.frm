@@ -4,19 +4,19 @@ Begin VB.Form View
    BorderStyle     =   1  'Fixed Single
    Caption         =   "3D View"
    ClientHeight    =   3600
-   ClientLeft      =   2955
-   ClientTop       =   1680
+   ClientLeft      =   4605
+   ClientTop       =   3015
    ClientWidth     =   4800
    Height          =   4005
    Icon            =   "View.frx":0000
-   Left            =   2895
+   Left            =   4545
    LinkTopic       =   "Form1"
    MaxButton       =   0   'False
    MinButton       =   0   'False
    ScaleHeight     =   240
    ScaleMode       =   3  'Pixel
    ScaleWidth      =   320
-   Top             =   1335
+   Top             =   2670
    Width           =   4920
    Begin VB.Line linWalls 
       BorderColor     =   &H000000FF&
@@ -25,6 +25,22 @@ Begin VB.Form View
       X2              =   0
       Y1              =   160
       Y2              =   161
+   End
+   Begin VB.Image Sprites 
+      Height          =   135
+      Index           =   0
+      Left            =   720
+      Top             =   120
+      Width           =   135
+   End
+   Begin VB.Shape Ground 
+      BorderStyle     =   0  'Transparent
+      FillColor       =   &H00008000&
+      FillStyle       =   0  'Solid
+      Height          =   2055
+      Left            =   0
+      Top             =   1560
+      Width           =   4815
    End
 End
 Attribute VB_Name = "View"
@@ -38,6 +54,9 @@ Const ViewHHalf = ViewH / 2
 Const WallSideNone = 0
 Const WallSideNS = 1
 Const WallSideEW = 2
+
+Dim WallColorsNS(5) As Long
+Dim WallColorsEW(5) As Long
 
 Private Type TileRow
     Cells(10) As Integer
@@ -54,6 +73,7 @@ Dim PlayerDirY As Single
 Dim CameraLensX As Single
 Dim CameraLensY As Single
 Dim Map As TileMap
+
 Private Function RayWallDist(RayDir As Single)
     If 0 = RayDir Then
         Rem Use a large number so we don't divide by zero later.
@@ -87,8 +107,8 @@ Private Sub UpdateViewRay(VStripeX As Integer)
     Dim CameraLensVStripeX As Single
     Dim RayDirX As Single
     Dim RayDirY As Single
-    Dim RayTilemapX As Integer
-    Dim RayTilemapY As Integer
+    Dim RayTilemapX As Single
+    Dim RayTilemapY As Single
     Dim RayStepX As Integer
     Dim RayStepY As Integer
     Dim RayTileDistX As Single
@@ -97,6 +117,7 @@ Private Sub UpdateViewRay(VStripeX As Integer)
     Dim RayLenY As Single
     Dim WallDist As Single
     Dim WallLineHeight As Integer
+    Dim WallColorIdx As Integer
     Dim RayWallSide As Integer
     
     Rem No wall hit yet!
@@ -112,6 +133,7 @@ Private Sub UpdateViewRay(VStripeX As Integer)
     Rem Set tilemap tile ray is in based on player position.
     RayTilemapX = PlayerX
     RayTilemapY = PlayerY
+    MiniMap.RayStart VStripeX, PlayerX, PlayerY
     
     Rem Set initial distance to next wall based on ray angle hypoteneuse.
     RayTileDistX = RayWallDist(RayDirX)
@@ -150,32 +172,62 @@ Private Sub UpdateViewRay(VStripeX As Integer)
             RayWallSide = WallSideNS
         End If
         
-        Rem Check if there was actually a colission.
+        Rem Check if there was actually a collision.
         If 0 <= RayTilemapX And 10 > RayTilemapX And 0 <= RayTilemapY And 10 > RayTilemapY Then
-            If 0 = Map.Rows(Int(RayTilemapY)).Cells(Int(RayTilemapY)) Then
+            WallColorIdx = Map.Rows(Int(RayTilemapX)).Cells(Int(RayTilemapY))
+            If 0 = WallColorIdx Then
                 Rem In a cell with no wall.
                 RayWallSide = 0
             End If
+        Else
+            Rem Virtual wall of type 1 around the map.
+            WallColorIdx = 1
         End If
     Wend
     
     Rem Draw the wall that we eventually encountered.
     If WallSideEW = RayWallSide Then
         WallDist = (RayLenX - RayTileDistX)
-        VertLine VStripeX, ViewH / WallDist, &H800000
+        If WallDist < 0.01 Then
+            WallDist = 0.01
+        End If
+        VertLine VStripeX, ViewH / WallDist, WallColorsEW(WallColorIdx)
+        MiniMap.RayEnd VStripeX, RayTilemapX, RayTilemapY, WallColorsEW(WallColorIdx)
     Else
         WallDist = (RayLenY - RayTileDistY)
-        VertLine VStripeX, ViewH / WallDist, &HFF0000
+        If WallDist < 0.01 Then
+            WallDist = 0.01
+        End If
+        VertLine VStripeX, ViewH / WallDist, WallColorsNS(WallColorIdx)
+        MiniMap.RayEnd VStripeX, RayTilemapX, RayTilemapY, WallColorsNS(WallColorIdx)
     End If
     
 End Sub
-Public Sub VertLine(XOff As Integer, YHeight As Integer, Color As Long)
+Public Sub VertLine(XOff As Integer, YHeight As Single, ByVal Color As Long)
     linWalls(XOff).Y1 = ViewHHalf - (YHeight / 2)
     linWalls(XOff).Y2 = ViewHHalf + (YHeight / 2)
     linWalls(XOff).X1 = XOff
     linWalls(XOff).X2 = XOff
     linWalls(XOff).Visible = True
     linWalls(XOff).BorderColor = Color
+End Sub
+
+Public Sub WalkView(Distance As Single)
+    Dim DistanceX As Single
+    Dim DistanceY As Single
+    Dim NewX As Single
+    Dim NewY As Single
+    
+    Rem PlayerDir* are precalculated to increment rays, so walking is just another "ray"!
+    NewX = PlayerX + (Distance * PlayerDirX)
+    NewY = PlayerY + (Distance * PlayerDirY)
+    
+    If Map.Rows(Int(NewX)).Cells(Int(NewY)) = 0 Then
+        PlayerX = NewX
+        PlayerY = NewY
+    End If
+    
+    UpdateView
 End Sub
 
 Private Sub Form_KeyPress(KeyAscii As Integer)
@@ -190,13 +242,11 @@ Private Sub Form_KeyPress(KeyAscii As Integer)
     
     ElseIf KeyAscii = 119 Then
         Rem 'w'
-        PlayerX = PlayerX - 0.1
-        UpdateView
+        WalkView 1
     
     ElseIf KeyAscii = 115 Then
         Rem 's'
-        PlayerX = PlayerX + 0.1
-        UpdateView
+        WalkView -1
     End If
 End Sub
 
@@ -211,6 +261,16 @@ Private Sub Form_Load()
     CameraLensX = 0
     CameraLensY = 0.66
     
+    Rem Setup wall colors.
+    WallColorsNS(1) = &HFF0000
+    WallColorsEW(1) = &H800000
+    WallColorsNS(2) = &HFF00&
+    WallColorsEW(2) = &H8000&
+    WallColorsNS(3) = &HFF&
+    WallColorsEW(3) = &H80&
+    WallColorsNS(4) = &HFF00FF
+    WallColorsEW(4) = &H800080
+    
     Rem Generate the tilemap.
     For Y = 0 To 9
         If Y = 0 Or Y = 9 Then
@@ -224,16 +284,28 @@ Private Sub Form_Load()
             Map.Rows(Y).Cells(9) = 1
         End If
     Next Y
+    Map.Rows(2).Cells(2) = 3
+    Map.Rows(7).Cells(7) = 4
     
     Rem Setup the wall lines.
     For XOff = 0 To ViewW - 1
+        Rem Expand control array as needed.
         If XOff > 0 Then
             Load linWalls(XOff)
         End If
+        Rem Bring to front.
+        linWalls(XOff).ZOrder
         VertLine XOff, 0, 0
     Next XOff
     
     UpdateView
+    
+    MiniMap.Show
+End Sub
+
+
+Private Sub Form_Unload(Cancel As Integer)
+    Unload MiniMap
 End Sub
 
 
