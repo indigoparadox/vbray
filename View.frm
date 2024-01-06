@@ -18,6 +18,29 @@ Begin VB.Form View
    ScaleWidth      =   320
    Top             =   3030
    Width           =   4920
+   Begin VB.Timer TimerAnimate 
+      Interval        =   500
+      Left            =   1800
+      Top             =   840
+   End
+   Begin VB.Image ImageMaid 
+      Height          =   240
+      Index           =   1
+      Left            =   3840
+      Picture         =   "View.frx":0442
+      Top             =   600
+      Visible         =   0   'False
+      Width           =   240
+   End
+   Begin VB.Image ImageMaid 
+      Height          =   240
+      Index           =   0
+      Left            =   3840
+      Picture         =   "View.frx":0884
+      Top             =   240
+      Visible         =   0   'False
+      Width           =   240
+   End
    Begin VB.Line linWalls 
       BorderColor     =   &H000000FF&
       Index           =   0
@@ -27,11 +50,13 @@ Begin VB.Form View
       Y2              =   161
    End
    Begin VB.Image Sprites 
-      Height          =   135
+      Height          =   975
       Index           =   0
-      Left            =   720
+      Left            =   -150
+      Picture         =   "View.frx":0CC6
+      Stretch         =   -1  'True
       Top             =   120
-      Width           =   135
+      Width           =   975
    End
    Begin VB.Shape Ground 
       BorderStyle     =   0  'Transparent
@@ -51,10 +76,11 @@ Option Explicit
 Const ViewW = 320
 Const ViewH = 240
 Const ViewHHalf = ViewH / 2
+Const Overscan = 80
 
 Const WalkSpeed = 1
 
-Const MaxSprites = 10
+Const MaxMobiles = 10
 Const TilemapWidth = 10
 Const TilemapHeight = 10
 
@@ -75,15 +101,19 @@ Private Type Tilemap
     Rows(10) As TileRow
 End Type
 
-Private Type Sprite
+Private Type Mobile
     PictureIdx As Integer
     TilemapX As Integer
     TilemapY As Integer
+    VXStart As Integer
+    VXEnd As Integer
+    Visible As Boolean
+    Frame As Integer
 End Type
 
 Private Type Ray
     Dir(3) As Single
-    Tilemap(3) As Single
+    Tilemap(3) As Integer
     Step(3) As Integer
     TileDist(3) As Single
     Reach(3) As Single
@@ -99,7 +129,8 @@ Dim PlayerDirY As Single
 Dim CameraLensX As Single
 Dim CameraLensY As Single
 Dim Map As Tilemap
-Dim SpriteObjects(MaxSprites) As Sprite
+Dim Mobiles(MaxMobiles) As Mobile
+Dim MobilesActive As Integer
 
 Private Sub DrawWall(Ray As Ray, ByVal VStripeX As Integer, ByVal CoordIdx As Integer)
     Dim WallDist As Single
@@ -112,17 +143,18 @@ Private Sub DrawWall(Ray As Ray, ByVal VStripeX As Integer, ByVal CoordIdx As In
     End If
     
     Rem Draw the wall line and minimap ray.
-    VertLine VStripeX, ViewH / WallDist, WallColors(CoordIdx, Ray.WallColorIdx)
+    DrawVertLine VStripeX, ViewH / WallDist, WallColors(CoordIdx, Ray.WallColorIdx)
     MiniMap.RayEnd VStripeX, Ray.Tilemap(XIdx), Ray.Tilemap(YIdx), WallColors(CoordIdx, Ray.WallColorIdx)
+    Rem Log.LogLine "Ended at: " & Ray.Tilemap(XIdx) & ", " & Ray.Tilemap(YIdx)
 End Sub
 
 
-Private Function RayWallDist(RayDir As Single)
+Private Function InitRayWallDist(RayDir As Single)
     If 0 = RayDir Then
         Rem Use a large number so we don't divide by zero later.
-        RayWallDist = 1E+32
+        InitRayWallDist = 1E+32
     Else
-        RayWallDist = Abs(1 / RayDir)
+        InitRayWallDist = Abs(1 / RayDir)
     End If
 End Function
 
@@ -138,16 +170,41 @@ End Sub
 
 Public Sub UpdateView()
     Dim VStripeX As Integer
-    Dim Rays(ViewW) As Ray
+    Dim Rays(ViewW + (2 * Overscan)) As Ray
+    Dim MobileIter As Integer
+    Dim MobileWidth As Integer
+    
+    Rem Reset all mobiles to off-screen.
+    For MobileIter = 0 To MobilesActive
+        Mobiles(MobileIter).VXStart = 0
+        Mobiles(MobileIter).VXEnd = 0
+        Mobiles(MobileIter).Visible = False
+    Next MobileIter
     
     Rem Cast a ray for each pixel-wide vertical line.
-    For VStripeX = 0 To ViewW - 1
-        UpdateViewRay VStripeX, Rays(VStripeX)
+    Rem TODO: Maybe start at a negative number to overscan for sprites?
+    For VStripeX = -1 * Overscan To ViewW + Overscan
+        UpdateViewRay VStripeX, Rays(VStripeX + Overscan)
+        Sprites(Mobiles(MobileIter).PictureIdx).Visible = False
     Next VStripeX
+    
+    Rem Place picture boxes for visible mobiles.
+    For MobileIter = 0 To MobilesActive
+        If Mobiles(MobileIter).Visible Then
+            MobileWidth = Mobiles(MobileIter).VXEnd - Mobiles(MobileIter).VXStart
+            Sprites(Mobiles(MobileIter).PictureIdx).Left = Mobiles(MobileIter).VXStart
+            Sprites(Mobiles(MobileIter).PictureIdx).Width = MobileWidth
+            Sprites(Mobiles(MobileIter).PictureIdx).Height = MobileWidth
+            Sprites(Mobiles(MobileIter).PictureIdx).Top = ViewHHalf - (MobileWidth / 2)
+            Sprites(Mobiles(MobileIter).PictureIdx).Visible = True
+            Sprites(Mobiles(MobileIter).PictureIdx).ZOrder
+        End If
+    Next MobileIter
 End Sub
 
 Private Sub UpdateViewRay(VStripeX As Integer, Ray As Ray)
     Dim CameraLensVStripeX As Single
+    Dim MobileIter As Integer
     
     Rem No wall hit yet!
     Ray.WallSide = WallSideNone
@@ -162,11 +219,13 @@ Private Sub UpdateViewRay(VStripeX As Integer, Ray As Ray)
     Rem Set tilemap tile ray is in based on player position.
     Ray.Tilemap(XIdx) = PlayerX
     Ray.Tilemap(YIdx) = PlayerY
-    MiniMap.RayStart VStripeX, PlayerX, PlayerY
+    If 0 <= VStripeX And VStripeX < ViewW Then
+        MiniMap.RayStart VStripeX, PlayerX, PlayerY
+    End If
     
     Rem Set initial distance to next wall based on ray angle hypoteneuse.
-    Ray.TileDist(XIdx) = RayWallDist(Ray.Dir(XIdx))
-    Ray.TileDist(YIdx) = RayWallDist(Ray.Dir(YIdx))
+    Ray.TileDist(XIdx) = InitRayWallDist(Ray.Dir(XIdx))
+    Ray.TileDist(YIdx) = InitRayWallDist(Ray.Dir(YIdx))
 
     If 0 > Ray.Dir(XIdx) Then
         Rem Moving to the west.
@@ -212,13 +271,30 @@ Private Sub UpdateViewRay(VStripeX As Integer, Ray As Ray)
             Rem Virtual wall of type 1 around the map.
             Ray.WallColorIdx = 1
         End If
+        
+        Rem Check if this ray passes through a mobile tile.
+        For MobileIter = 0 To MobilesActive
+            If Mobiles(MobileIter).TilemapX = Ray.Tilemap(XIdx) And _
+            Mobiles(MobileIter).TilemapY = Ray.Tilemap(YIdx) Then
+                If Not Mobiles(MobileIter).Visible Then
+                    Rem This is the first vertical X stripe this mobile appears in.
+                    Mobiles(MobileIter).VXStart = VStripeX
+                    Mobiles(MobileIter).Visible = True
+                End If
+                If VStripeX > Mobiles(MobileIter).VXEnd Then
+                    Rem This is the first vertical X stripe this mobile appears in.
+                    Mobiles(MobileIter).VXEnd = VStripeX
+                End If
+            End If
+        Next MobileIter
     Wend
     
-    Rem Draw the wall that we eventually encountered.
-    DrawWall Ray, VStripeX, Ray.WallSide
-    
+    If 0 <= VStripeX And VStripeX < ViewW Then
+        Rem Draw the wall that we eventually encountered (if it's on-screen).
+        DrawWall Ray, VStripeX, Ray.WallSide
+    End If
 End Sub
-Public Sub VertLine(XOff As Integer, YHeight As Single, ByVal Color As Long)
+Public Sub DrawVertLine(XOff As Integer, YHeight As Single, ByVal Color As Long)
     linWalls(XOff).Y1 = ViewHHalf - (YHeight / 2)
     linWalls(XOff).Y2 = ViewHHalf + (YHeight / 2)
     linWalls(XOff).X1 = XOff
@@ -305,7 +381,10 @@ Private Sub Form_Load()
     Map.Rows(7).Cells(7) = 4
     
     Rem Generate sprites.
-    
+    MobilesActive = 1
+    Mobiles(0).PictureIdx = 0
+    Mobiles(0).TilemapX = 2
+    Mobiles(0).TilemapY = 7
     
     Rem Setup the wall lines.
     For XOff = 0 To ViewW - 1
@@ -315,7 +394,7 @@ Private Sub Form_Load()
         End If
         Rem Bring to front.
         linWalls(XOff).ZOrder
-        VertLine XOff, 0, 0
+        DrawVertLine XOff, 0, 0
     Next XOff
     
     UpdateView
@@ -324,11 +403,27 @@ Private Sub Form_Load()
     MiniMap.ScaleWidth = TilemapWidth * 3
     MiniMap.ScaleHeight = TilemapHeight * 3
     MiniMap.Show
+    
+    Log.Show
 End Sub
 
 
 Private Sub Form_Unload(Cancel As Integer)
     Unload MiniMap
+End Sub
+
+
+Private Sub TimerAnimate_Timer()
+    Dim MobIter As Integer
+       
+    For MobIter = 0 To MobilesActive
+        If 0 = Mobiles(MobIter).Frame Then
+            Mobiles(MobIter).Frame = 1
+        Else
+            Mobiles(MobIter).Frame = 0
+        End If
+        Sprites(Mobiles(MobIter).PictureIdx).Picture = ImageMaid(Mobiles(MobIter).Frame).Picture
+    Next MobIter
 End Sub
 
 
