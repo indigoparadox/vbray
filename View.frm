@@ -4,19 +4,19 @@ Begin VB.Form View
    BorderStyle     =   1  'Fixed Single
    Caption         =   "3D View"
    ClientHeight    =   3600
-   ClientLeft      =   5265
-   ClientTop       =   3375
+   ClientLeft      =   5205
+   ClientTop       =   2460
    ClientWidth     =   4800
-   Height          =   4005
+   Height          =   4290
    Icon            =   "View.frx":0000
-   Left            =   5205
+   Left            =   5145
    LinkTopic       =   "Form1"
    MaxButton       =   0   'False
    MinButton       =   0   'False
    ScaleHeight     =   240
    ScaleMode       =   3  'Pixel
    ScaleWidth      =   320
-   Top             =   3030
+   Top             =   1830
    Width           =   4920
    Begin VB.Timer TimerAnimate 
       Interval        =   500
@@ -66,6 +66,21 @@ Begin VB.Form View
       Left            =   0
       Top             =   1560
       Width           =   4815
+   End
+   Begin VB.Menu MenuFile 
+      Caption         =   "&File"
+      Begin VB.Menu MenuExit 
+         Caption         =   "E&xit"
+      End
+   End
+   Begin VB.Menu MenuWindow 
+      Caption         =   "&Window"
+      Begin VB.Menu MenuMiniMap 
+         Caption         =   "&MiniMap"
+      End
+      Begin VB.Menu MenuLog 
+         Caption         =   "&Log"
+      End
    End
 End
 Attribute VB_Name = "View"
@@ -409,7 +424,34 @@ End Sub
 
 
 Private Sub Form_Unload(Cancel As Integer)
-    Unload MiniMap
+    If menuminimap.Checked Then
+        Unload MiniMap
+    End If
+    If MenuLog.Checked Then
+        Unload Log
+    End If
+End Sub
+
+
+Private Sub MenuExit_Click()
+    Unload View
+End Sub
+
+
+Private Sub MenuLog_Click()
+    If MenuLog.Checked Then
+        Unload Log
+    Else
+        Log.Show
+    End If
+End Sub
+
+Private Sub menuminimap_Click()
+    If menuminimap.Checked Then
+        Unload MiniMap
+    Else
+        MiniMap.Show
+    End If
 End Sub
 
 

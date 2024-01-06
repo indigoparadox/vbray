@@ -1,22 +1,22 @@
 VERSION 4.00
 Begin VB.Form MiniMap 
-   BackColor       =   &H00000000&
+   BackColor       =   &H00404040&
    BorderStyle     =   1  'Fixed Single
    Caption         =   "Map"
    ClientHeight    =   2595
-   ClientLeft      =   870
-   ClientTop       =   2505
+   ClientLeft      =   1635
+   ClientTop       =   2625
    ClientWidth     =   2880
    Height          =   3000
    Icon            =   "MiniMap.frx":0000
-   Left            =   810
+   Left            =   1575
    LinkTopic       =   "Form1"
    MaxButton       =   0   'False
    MinButton       =   0   'False
    ScaleHeight     =   45.773
    ScaleMode       =   6  'Millimeter
    ScaleWidth      =   50.8
-   Top             =   2160
+   Top             =   2280
    Width           =   3000
    Begin VB.Line Rays 
       BorderColor     =   &H00FFFFFF&
@@ -57,6 +57,13 @@ Private Sub Form_Load()
         Rem Bring to front.
         Rays(XOff).ZOrder
     Next XOff
+    
+    View.menuminimap.Checked = True
+End Sub
+
+
+Private Sub Form_Unload(Cancel As Integer)
+    View.menuminimap.Checked = False
 End Sub
 
 
