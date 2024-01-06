@@ -4,19 +4,19 @@ Begin VB.Form View
    BorderStyle     =   1  'Fixed Single
    Caption         =   "3D View"
    ClientHeight    =   3600
-   ClientLeft      =   4605
-   ClientTop       =   3015
+   ClientLeft      =   5265
+   ClientTop       =   3375
    ClientWidth     =   4800
    Height          =   4005
    Icon            =   "View.frx":0000
-   Left            =   4545
+   Left            =   5205
    LinkTopic       =   "Form1"
    MaxButton       =   0   'False
    MinButton       =   0   'False
    ScaleHeight     =   240
    ScaleMode       =   3  'Pixel
    ScaleWidth      =   320
-   Top             =   2670
+   Top             =   3030
    Width           =   4920
    Begin VB.Line linWalls 
       BorderColor     =   &H000000FF&
@@ -46,24 +46,50 @@ End
 Attribute VB_Name = "View"
 Attribute VB_Creatable = False
 Attribute VB_Exposed = False
+Option Explicit
 
 Const ViewW = 320
 Const ViewH = 240
 Const ViewHHalf = ViewH / 2
 
-Const WallSideNone = 0
-Const WallSideNS = 1
-Const WallSideEW = 2
+Const WalkSpeed = 1
 
-Dim WallColorsNS(5) As Long
-Dim WallColorsEW(5) As Long
+Const MaxSprites = 10
+Const TilemapWidth = 10
+Const TilemapHeight = 10
+
+Const WallSideNone = 0
+Const WallSideNS = 2
+Const WallSideEW = 1
+
+Const XIdx = 1
+Const YIdx = 2
+
+Dim WallColors(3, 5) As Long
 
 Private Type TileRow
     Cells(10) As Integer
 End Type
 
-Private Type TileMap
+Private Type Tilemap
     Rows(10) As TileRow
+End Type
+
+Private Type Sprite
+    PictureIdx As Integer
+    TilemapX As Integer
+    TilemapY As Integer
+End Type
+
+Private Type Ray
+    Dir(3) As Single
+    Tilemap(3) As Single
+    Step(3) As Integer
+    TileDist(3) As Single
+    Reach(3) As Single
+    WallColorIdx As Integer
+    WallSide As Integer
+    SpriteIdx As Integer
 End Type
 
 Dim PlayerX As Single
@@ -72,7 +98,24 @@ Dim PlayerDirX As Single
 Dim PlayerDirY As Single
 Dim CameraLensX As Single
 Dim CameraLensY As Single
-Dim Map As TileMap
+Dim Map As Tilemap
+Dim SpriteObjects(MaxSprites) As Sprite
+
+Private Sub DrawWall(Ray As Ray, ByVal VStripeX As Integer, ByVal CoordIdx As Integer)
+    Dim WallDist As Single
+
+    WallDist = (Ray.Reach(CoordIdx) - Ray.TileDist(CoordIdx))
+    
+    Rem Make sure we don't divide by zero when too close to a wall below!
+    If WallDist < 0.0001 Then
+        WallDist = 0.0001
+    End If
+    
+    Rem Draw the wall line and minimap ray.
+    VertLine VStripeX, ViewH / WallDist, WallColors(CoordIdx, Ray.WallColorIdx)
+    MiniMap.RayEnd VStripeX, Ray.Tilemap(XIdx), Ray.Tilemap(YIdx), WallColors(CoordIdx, Ray.WallColorIdx)
+End Sub
+
 
 Private Function RayWallDist(RayDir As Single)
     If 0 = RayDir Then
@@ -95,112 +138,84 @@ End Sub
 
 Public Sub UpdateView()
     Dim VStripeX As Integer
+    Dim Rays(ViewW) As Ray
     
     Rem Cast a ray for each pixel-wide vertical line.
     For VStripeX = 0 To ViewW - 1
-        UpdateViewRay VStripeX
+        UpdateViewRay VStripeX, Rays(VStripeX)
     Next VStripeX
 End Sub
 
-Private Sub UpdateViewRay(VStripeX As Integer)
-    Dim RayVector As Single
+Private Sub UpdateViewRay(VStripeX As Integer, Ray As Ray)
     Dim CameraLensVStripeX As Single
-    Dim RayDirX As Single
-    Dim RayDirY As Single
-    Dim RayTilemapX As Single
-    Dim RayTilemapY As Single
-    Dim RayStepX As Integer
-    Dim RayStepY As Integer
-    Dim RayTileDistX As Single
-    Dim RayTileDistY As Single
-    Dim RayLenX As Single
-    Dim RayLenY As Single
-    Dim WallDist As Single
-    Dim WallLineHeight As Integer
-    Dim WallColorIdx As Integer
-    Dim RayWallSide As Integer
     
     Rem No wall hit yet!
-    RayWallSide = WallSideNone
+    Ray.WallSide = WallSideNone
     
     Rem Translate pixel screen vertical coord into camera plane vertical coord.
     CameraLensVStripeX = ((2 * VStripeX) / ViewW) - 1
     
     Rem Setup ray for this vertical stripe's initial position.
-    RayDirX = PlayerDirX + (CameraLensX * CameraLensVStripeX)
-    RayDirY = PlayerDirY + (CameraLensY * CameraLensVStripeX)
+    Ray.Dir(XIdx) = PlayerDirX + (CameraLensX * CameraLensVStripeX)
+    Ray.Dir(YIdx) = PlayerDirY + (CameraLensY * CameraLensVStripeX)
     
     Rem Set tilemap tile ray is in based on player position.
-    RayTilemapX = PlayerX
-    RayTilemapY = PlayerY
+    Ray.Tilemap(XIdx) = PlayerX
+    Ray.Tilemap(YIdx) = PlayerY
     MiniMap.RayStart VStripeX, PlayerX, PlayerY
     
     Rem Set initial distance to next wall based on ray angle hypoteneuse.
-    RayTileDistX = RayWallDist(RayDirX)
-    RayTileDistY = RayWallDist(RayDirY)
+    Ray.TileDist(XIdx) = RayWallDist(Ray.Dir(XIdx))
+    Ray.TileDist(YIdx) = RayWallDist(Ray.Dir(YIdx))
 
-    If 0 > RayDirX Then
+    If 0 > Ray.Dir(XIdx) Then
         Rem Moving to the west.
-        RayStepX = -1
-        RayLenX = (PlayerX - RayTilemapX) * RayTileDistX
+        Ray.Step(XIdx) = -1
+        Ray.Reach(XIdx) = (PlayerX - Ray.Tilemap(XIdx)) * Ray.TileDist(XIdx)
     Else
         Rem Moving to the east.
-        RayStepX = 1
-        RayLenX = (RayTilemapX + (1# - PlayerX)) * RayTileDistX
+        Ray.Step(XIdx) = 1
+        Ray.Reach(XIdx) = (Ray.Tilemap(XIdx) + (1# - PlayerX)) * Ray.TileDist(XIdx)
     End If
     
-    If 0 > RayDirY Then
+    If 0 > Ray.Dir(YIdx) Then
         Rem Moving to the north.
-        RayStepY = -1
-        RayLenY = (PlayerY - RayTilemapY) * RayTileDistY
+        Ray.Step(YIdx) = -1
+        Ray.Reach(YIdx) = (PlayerY - Ray.Tilemap(YIdx)) * Ray.TileDist(YIdx)
     Else
         Rem Moving to the south.
-        RayStepY = 1
-        RayLenY = (RayTilemapY + (1# - PlayerY)) * RayTileDistY
+        Ray.Step(YIdx) = 1
+        Ray.Reach(YIdx) = (Ray.Tilemap(YIdx) + (1# - PlayerY)) * Ray.TileDist(YIdx)
     End If
     
     Rem Perform the raycast!
-    While WallSideNone = RayWallSide
+    While WallSideNone = Ray.WallSide
         Rem Move the ray forward depending on whether last time we moved map tile by X or Y.
-        If RayLenX < RayLenY Then
-            RayLenX = RayLenX + RayTileDistX
-            RayTilemapX = RayTilemapX + RayStepX
-            RayWallSide = WallSideEW
+        If Ray.Reach(XIdx) < Ray.Reach(YIdx) Then
+            Ray.Reach(XIdx) = Ray.Reach(XIdx) + Ray.TileDist(XIdx)
+            Ray.Tilemap(XIdx) = Ray.Tilemap(XIdx) + Ray.Step(XIdx)
+            Ray.WallSide = WallSideEW
         Else
-            RayLenY = RayLenY + RayTileDistY
-            RayTilemapY = RayTilemapY + RayStepY
-            RayWallSide = WallSideNS
+            Ray.Reach(YIdx) = Ray.Reach(YIdx) + Ray.TileDist(YIdx)
+            Ray.Tilemap(YIdx) = Ray.Tilemap(YIdx) + Ray.Step(YIdx)
+            Ray.WallSide = WallSideNS
         End If
         
         Rem Check if there was actually a collision.
-        If 0 <= RayTilemapX And 10 > RayTilemapX And 0 <= RayTilemapY And 10 > RayTilemapY Then
-            WallColorIdx = Map.Rows(Int(RayTilemapX)).Cells(Int(RayTilemapY))
-            If 0 = WallColorIdx Then
+        If 0 <= Ray.Tilemap(XIdx) And TilemapWidth > Ray.Tilemap(XIdx) And 0 <= Ray.Tilemap(YIdx) And TilemapHeight > Ray.Tilemap(YIdx) Then
+            Ray.WallColorIdx = Map.Rows(Int(Ray.Tilemap(XIdx))).Cells(Int(Ray.Tilemap(YIdx)))
+            If 0 = Ray.WallColorIdx Then
                 Rem In a cell with no wall.
-                RayWallSide = 0
+                Ray.WallSide = 0
             End If
         Else
             Rem Virtual wall of type 1 around the map.
-            WallColorIdx = 1
+            Ray.WallColorIdx = 1
         End If
     Wend
     
     Rem Draw the wall that we eventually encountered.
-    If WallSideEW = RayWallSide Then
-        WallDist = (RayLenX - RayTileDistX)
-        If WallDist < 0.01 Then
-            WallDist = 0.01
-        End If
-        VertLine VStripeX, ViewH / WallDist, WallColorsEW(WallColorIdx)
-        MiniMap.RayEnd VStripeX, RayTilemapX, RayTilemapY, WallColorsEW(WallColorIdx)
-    Else
-        WallDist = (RayLenY - RayTileDistY)
-        If WallDist < 0.01 Then
-            WallDist = 0.01
-        End If
-        VertLine VStripeX, ViewH / WallDist, WallColorsNS(WallColorIdx)
-        MiniMap.RayEnd VStripeX, RayTilemapX, RayTilemapY, WallColorsNS(WallColorIdx)
-    End If
+    DrawWall Ray, VStripeX, Ray.WallSide
     
 End Sub
 Public Sub VertLine(XOff As Integer, YHeight As Single, ByVal Color As Long)
@@ -252,6 +267,8 @@ End Sub
 
 Private Sub Form_Load()
     Dim XOff As Integer
+    Dim Y As Integer
+    Dim X As Integer
     
     Rem Set player position.
     PlayerX = 4
@@ -262,30 +279,33 @@ Private Sub Form_Load()
     CameraLensY = 0.66
     
     Rem Setup wall colors.
-    WallColorsNS(1) = &HFF0000
-    WallColorsEW(1) = &H800000
-    WallColorsNS(2) = &HFF00&
-    WallColorsEW(2) = &H8000&
-    WallColorsNS(3) = &HFF&
-    WallColorsEW(3) = &H80&
-    WallColorsNS(4) = &HFF00FF
-    WallColorsEW(4) = &H800080
+    WallColors(WallSideNS, 1) = &HFF0000
+    WallColors(WallSideEW, 1) = &H800000
+    WallColors(WallSideNS, 2) = &HFF00&
+    WallColors(WallSideEW, 2) = &H8000&
+    WallColors(WallSideNS, 3) = &HFF&
+    WallColors(WallSideEW, 3) = &H80&
+    WallColors(WallSideNS, 4) = &HFF00FF
+    WallColors(WallSideEW, 4) = &H800080
     
     Rem Generate the tilemap.
-    For Y = 0 To 9
-        If Y = 0 Or Y = 9 Then
+    For Y = 0 To TilemapHeight - 1
+        If Y = 0 Or Y = TilemapHeight - 1 Then
             Rem Fill in entire top and bottom rows.
-            For X = 0 To 9
+            For X = 0 To TilemapWidth - 1
                 Map.Rows(Y).Cells(X) = 1
             Next X
         Else
             Rem Just fill in side walls.
             Map.Rows(Y).Cells(0) = 1
-            Map.Rows(Y).Cells(9) = 1
+            Map.Rows(Y).Cells(TilemapHeight - 1) = 1
         End If
     Next Y
     Map.Rows(2).Cells(2) = 3
     Map.Rows(7).Cells(7) = 4
+    
+    Rem Generate sprites.
+    
     
     Rem Setup the wall lines.
     For XOff = 0 To ViewW - 1
@@ -300,6 +320,9 @@ Private Sub Form_Load()
     
     UpdateView
     
+    Rem Setup Minimap.
+    MiniMap.ScaleWidth = TilemapWidth * 3
+    MiniMap.ScaleHeight = TilemapHeight * 3
     MiniMap.Show
 End Sub
 
