@@ -197,7 +197,10 @@ Public Sub UpdateView()
     Next MobileIter
     
     Rem Cast a ray for each pixel-wide vertical line.
-    Rem TODO: Maybe start at a negative number to overscan for sprites?
+    Rem We use an overscan here, processing a few X pixels to the left/right of the visible
+    Rem field, so that sprite picture boxes that start off-screen to the left or right
+    Rem because they're partially off-screen due to e.g. being too close, don't vanish
+    Rem entirely.
     For VStripeX = -1 * Overscan To ViewW + Overscan
         UpdateViewRay VStripeX, Rays(VStripeX + Overscan)
         Sprites(Mobiles(MobileIter).PictureIdx).Visible = False
