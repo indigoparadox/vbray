@@ -36,7 +36,7 @@ Begin VB.Form View
       Height          =   240
       Index           =   0
       Left            =   3840
-      Picture         =   "View.frx":0884
+      Picture         =   "View.frx":058C
       Top             =   240
       Visible         =   0   'False
       Width           =   240
@@ -53,7 +53,7 @@ Begin VB.Form View
       Height          =   975
       Index           =   0
       Left            =   -150
-      Picture         =   "View.frx":0CC6
+      Picture         =   "View.frx":06D6
       Stretch         =   -1  'True
       Top             =   120
       Width           =   975
