@@ -23,6 +23,14 @@ Begin VB.Form View
       Left            =   1800
       Top             =   840
    End
+   Begin MSComDlg.CommonDialog Dialog 
+      Left            =   4080
+      Top             =   240
+      _Version        =   65536
+      _ExtentX        =   847
+      _ExtentY        =   847
+      _StockProps     =   0
+   End
    Begin VB.Image ImageMaid 
       Height          =   240
       Index           =   1
@@ -69,6 +77,9 @@ Begin VB.Form View
    End
    Begin VB.Menu MenuFile 
       Caption         =   "&File"
+      Begin VB.Menu MenuOpenTilemap 
+         Caption         =   "&Open Tilemap"
+      End
       Begin VB.Menu MenuExit 
          Caption         =   "E&xit"
       End
@@ -196,32 +207,36 @@ Public Sub LoadTilemap(Filename As String)
             View.Ground.FillColor = Int(LineArr(1))
             
         ElseIf "width" = LineArr(0) Then
-            Log.LogLine "Map width: " & LineArr(1)
-            TilemapWidth = Int(LineArr(1))
+            Rem Log.LogLine "Map width: " & LineArr(1)
+            TilemapWidth = LineArr(1)
             
         ElseIf "height" = LineArr(0) Then
-            Log.LogLine "Map height: " & LineArr(1)
-            TilemapLength = Int(LineArr(1))
+            Rem Log.LogLine "Map height: " & LineArr(1)
+            TilemapLength = LineArr(1)
             
         ElseIf "map" = LineArr(0) Then
             For TileIdx = 1 To TilemapWidth
                 Rem TODO: Verify that the array is really TilemapWidth + 1 tiles long first.
-                Map.Rows(RowIdx).Tiles(TileIdx - 1) = Int(LineArr(TileIdx))
+                Map.Rows(RowIdx).Tiles(TileIdx - 1) = LineArr(TileIdx)
             Next TileIdx
             RowIdx = RowIdx + 1
             
         ElseIf "mobile" = LineArr(0) Then
             Rem Create a new mobile.
-            Mobiles(MobilesActive).PictureIdx = Int(LineArr(1))
-            Mobiles(MobilesActive).TilemapX = Int(LineArr(2))
-            Mobiles(MobilesActive).TilemapY = Int(LineArr(3))
+            Mobiles(MobilesActive).PictureIdx = LineArr(1)
+            Mobiles(MobilesActive).TilemapX = LineArr(2)
+            Mobiles(MobilesActive).TilemapY = LineArr(3)
             MobilesActive = MobilesActive + 1
             
         ElseIf "start" = LineArr(0) Then
             Rem Set player starting position.
-            PlayerX = Int(LineArr(1))
-            PlayerY = Int(LineArr(2))
-            
+            PlayerX = LineArr(1)
+            PlayerY = LineArr(2)
+            PlayerDirX = LineArr(3)
+            PlayerDirY = LineArr(4)
+            CameraLensX = LineArr(5)
+            CameraLensY = LineArr(6)
+
         End If
     Loop
     
@@ -453,14 +468,6 @@ Private Sub Form_Load()
     Dim Y As Integer
     Dim X As Integer
     
-    Rem Set player position.
-    PlayerX = 4
-    PlayerY = 4
-    PlayerDirX = -1
-    PlayerDirY = 0
-    CameraLensX = 0
-    CameraLensY = 0.66
-    
     Rem Setup wall colors.
     WallColors(WallSideNS, 1) = &HFF0000
     WallColors(WallSideEW, 1) = &H800000
@@ -482,7 +489,7 @@ Private Sub Form_Load()
         DrawVertLine XOff, 0, 0
     Next XOff
     
-    LoadTilemap "Arcade.txt"
+    LoadTilemap "Arcade.csv"
 
     MiniMap.Show
     Log.Show
@@ -520,6 +527,15 @@ Private Sub menuminimap_Click()
     End If
 End Sub
 
+
+Private Sub MenuOpenTilemap_Click()
+    dialog.DialogTitle = "Open Tilemap"
+    dialog.Filter = "Comma-Separated Values (*.csv)|*.csv"
+    dialog.ShowOpen
+    If "" <> dialog.Filename Then
+        LoadTilemap dialog.Filename
+    End If
+End Sub
 
 Private Sub TimerAnimate_Timer()
     Dim MobIter As Integer
