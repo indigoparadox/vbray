@@ -60,11 +60,11 @@ Begin VB.Form View
    End
    Begin VB.Shape Ground 
       BorderStyle     =   0  'Transparent
-      FillColor       =   &H00008000&
+      FillColor       =   &H00FFFFFF&
       FillStyle       =   0  'Solid
       Height          =   2055
       Left            =   0
-      Top             =   1560
+      Top             =   1800
       Width           =   4815
    End
    Begin VB.Menu MenuFile 
@@ -96,8 +96,6 @@ Const Overscan = 80
 Const WalkSpeed = 1
 
 Const MaxMobiles = 10
-Const TilemapWidth = 10
-Const TilemapHeight = 10
 
 Const WallSideNone = 0
 Const WallSideNS = 2
@@ -109,11 +107,11 @@ Const YIdx = 2
 Dim WallColors(3, 5) As Long
 
 Private Type TileRow
-    Cells(10) As Integer
+    Tiles(100) As Integer
 End Type
 
 Private Type Tilemap
-    Rows(10) As TileRow
+    Rows(100) As TileRow
 End Type
 
 Private Type Mobile
@@ -146,6 +144,8 @@ Dim CameraLensY As Single
 Dim Map As Tilemap
 Dim Mobiles(MaxMobiles) As Mobile
 Dim MobilesActive As Integer
+Dim TilemapWidth As Integer
+Dim TilemapLength As Integer
 
 Private Sub DrawWall(Ray As Ray, ByVal VStripeX As Integer, ByVal CoordIdx As Integer)
     Dim WallDist As Single
@@ -173,6 +173,65 @@ Private Function InitRayWallDist(RayDir As Single)
     End If
 End Function
 
+Public Sub LoadTilemap(Filename As String)
+    Dim FileNo As Long
+    Dim LineIn As String
+    Dim LineArr() As String
+    Dim TileIdx As Integer
+    Dim RowIdx As Integer
+    
+    FileNo = FreeFile
+    Open Filename For Input Access Read Shared As FileNo
+    
+    Rem Initialize global variables.
+    MobilesActive = 0
+    
+    RowIdx = 0
+    Do Until EOF(FileNo)
+        Line Input #FileNo, LineIn
+        StringSplit LineIn, ",", LineArr
+
+        Rem Parse each line based on what kind of line it is.
+        If "floor" = LineArr(0) Then
+            View.Ground.FillColor = Int(LineArr(1))
+            
+        ElseIf "width" = LineArr(0) Then
+            Log.LogLine "Map width: " & LineArr(1)
+            TilemapWidth = Int(LineArr(1))
+            
+        ElseIf "height" = LineArr(0) Then
+            Log.LogLine "Map height: " & LineArr(1)
+            TilemapLength = Int(LineArr(1))
+            
+        ElseIf "map" = LineArr(0) Then
+            For TileIdx = 1 To TilemapWidth
+                Rem TODO: Verify that the array is really TilemapWidth + 1 tiles long first.
+                Map.Rows(RowIdx).Tiles(TileIdx - 1) = Int(LineArr(TileIdx))
+            Next TileIdx
+            RowIdx = RowIdx + 1
+            
+        ElseIf "mobile" = LineArr(0) Then
+            Rem Create a new mobile.
+            Mobiles(MobilesActive).PictureIdx = Int(LineArr(1))
+            Mobiles(MobilesActive).TilemapX = Int(LineArr(2))
+            Mobiles(MobilesActive).TilemapY = Int(LineArr(3))
+            MobilesActive = MobilesActive + 1
+            
+        ElseIf "start" = LineArr(0) Then
+            Rem Set player starting position.
+            PlayerX = Int(LineArr(1))
+            PlayerY = Int(LineArr(2))
+            
+        End If
+    Loop
+    
+    UpdateView
+    
+    Rem Setup Minimap.
+    MiniMap.ScaleWidth = TilemapWidth * 3
+    MiniMap.ScaleHeight = TilemapLength * 3
+End Sub
+
 Private Sub RotateView(ByVal PlayerCurrentDirX As Single, ByVal CameraCurrentDirX As Single, RotateSpeed As Single)
     Rem Pass the old dir in by value so we can use it in the rotation multiplications below.
     PlayerDirX = (PlayerCurrentDirX * Cos(RotateSpeed)) - (PlayerDirY * Sin(RotateSpeed))
@@ -182,6 +241,36 @@ Private Sub RotateView(ByVal PlayerCurrentDirX As Single, ByVal CameraCurrentDir
     UpdateView
 End Sub
 
+
+Public Sub StringSplit(Haystack As String, Needle As String, StringsOut() As String)
+    Dim NewHaystack As String
+    Dim LastNeedle As Integer
+    Dim ThisNeedle As Integer
+    Dim StringsFound As Integer
+    
+    StringsFound = 0
+    ThisNeedle = 1
+    LastNeedle = 1
+    Do
+        Rem Find the next comma.
+        ThisNeedle = InStr(LastNeedle, Haystack, Needle, 1)
+        
+        Rem This is either the next or last substring, but a substring regardless.
+        ReDim Preserve StringsOut(StringsFound) As String
+        
+        If 0 = ThisNeedle Then
+            Rem This is the last substring, so just grab the rest of the string into it.
+            StringsOut(StringsFound) = Mid(Haystack, LastNeedle)
+            StringsFound = StringsFound + 1
+            Exit Do
+        Else
+            Rem The length of a string between commas is the last needle minus this needle.
+            StringsOut(StringsFound) = Mid(Haystack, LastNeedle, ThisNeedle - LastNeedle)
+            StringsFound = StringsFound + 1
+        End If
+        LastNeedle = ThisNeedle + 1
+    Loop
+End Sub
 
 Public Sub UpdateView()
     Dim VStripeX As Integer
@@ -279,8 +368,8 @@ Private Sub UpdateViewRay(VStripeX As Integer, Ray As Ray)
         End If
         
         Rem Check if there was actually a collision.
-        If 0 <= Ray.Tilemap(XIdx) And TilemapWidth > Ray.Tilemap(XIdx) And 0 <= Ray.Tilemap(YIdx) And TilemapHeight > Ray.Tilemap(YIdx) Then
-            Ray.WallColorIdx = Map.Rows(Int(Ray.Tilemap(XIdx))).Cells(Int(Ray.Tilemap(YIdx)))
+        If 0 <= Ray.Tilemap(XIdx) And TilemapWidth > Ray.Tilemap(XIdx) And 0 <= Ray.Tilemap(YIdx) And TilemapLength > Ray.Tilemap(YIdx) Then
+            Ray.WallColorIdx = Map.Rows(Int(Ray.Tilemap(XIdx))).Tiles(Int(Ray.Tilemap(YIdx)))
             If 0 = Ray.WallColorIdx Then
                 Rem In a cell with no wall.
                 Ray.WallSide = 0
@@ -331,7 +420,7 @@ Public Sub WalkView(Distance As Single)
     NewX = PlayerX + (Distance * PlayerDirX)
     NewY = PlayerY + (Distance * PlayerDirY)
     
-    If Map.Rows(Int(NewX)).Cells(Int(NewY)) = 0 Then
+    If Map.Rows(Int(NewX)).Tiles(Int(NewY)) = 0 Then
         PlayerX = NewX
         PlayerY = NewY
     End If
@@ -382,28 +471,6 @@ Private Sub Form_Load()
     WallColors(WallSideNS, 4) = &HFF00FF
     WallColors(WallSideEW, 4) = &H800080
     
-    Rem Generate the tilemap.
-    For Y = 0 To TilemapHeight - 1
-        If Y = 0 Or Y = TilemapHeight - 1 Then
-            Rem Fill in entire top and bottom rows.
-            For X = 0 To TilemapWidth - 1
-                Map.Rows(Y).Cells(X) = 1
-            Next X
-        Else
-            Rem Just fill in side walls.
-            Map.Rows(Y).Cells(0) = 1
-            Map.Rows(Y).Cells(TilemapHeight - 1) = 1
-        End If
-    Next Y
-    Map.Rows(2).Cells(2) = 3
-    Map.Rows(7).Cells(7) = 4
-    
-    Rem Generate sprites.
-    MobilesActive = 1
-    Mobiles(0).PictureIdx = 0
-    Mobiles(0).TilemapX = 2
-    Mobiles(0).TilemapY = 7
-    
     Rem Setup the wall lines.
     For XOff = 0 To ViewW - 1
         Rem Expand control array as needed.
@@ -415,13 +482,9 @@ Private Sub Form_Load()
         DrawVertLine XOff, 0, 0
     Next XOff
     
-    UpdateView
-    
-    Rem Setup Minimap.
-    MiniMap.ScaleWidth = TilemapWidth * 3
-    MiniMap.ScaleHeight = TilemapHeight * 3
+    LoadTilemap "Arcade.txt"
+
     MiniMap.Show
-    
     Log.Show
 End Sub
 
