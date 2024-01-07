@@ -489,7 +489,7 @@ Private Sub Form_Load()
         DrawVertLine XOff, 0, 0
     Next XOff
     
-    LoadTilemap "Arcade.csv"
+    LoadTilemap "arcade.csv"
 
     MiniMap.Show
     Log.Show
