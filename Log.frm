@@ -2,16 +2,16 @@ VERSION 4.00
 Begin VB.Form Log 
    Caption         =   "Log"
    ClientHeight    =   2430
-   ClientLeft      =   1755
-   ClientTop       =   6735
+   ClientLeft      =   2850
+   ClientTop       =   6585
    ClientWidth     =   8190
    Height          =   2835
-   Left            =   1695
+   Icon            =   "Log.frx":0000
+   Left            =   2790
    LinkTopic       =   "Form1"
-   Picture         =   "Log.frx":0000
    ScaleHeight     =   2430
    ScaleWidth      =   8190
-   Top             =   6390
+   Top             =   6240
    Width           =   8310
    Begin VB.TextBox LogText 
       Height          =   2415
@@ -37,8 +37,10 @@ Private Sub Form_Resize()
     logtext.Height = Log.Height - 405
 End Sub
 
-Public Sub LogLine(Message As String)
-    logtext.text = logtext.text & Message & vbCrLf
+Public Sub LogDebug(Message As String)
+    If View.MenuDebugLog.Checked Then
+        logtext.Text = Message & vbCrLf & logtext.Text
+    End If
 End Sub
 
 Private Sub Form_Unload(Cancel As Integer)

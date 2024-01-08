@@ -58,12 +58,12 @@ Private Sub Form_Load()
         Rays(XOff).ZOrder
     Next XOff
     
-    View.menuminimap.Checked = True
+    View.MenuMiniMap.Checked = True
 End Sub
 
 
 Private Sub Form_Unload(Cancel As Integer)
-    View.menuminimap.Checked = False
+    View.MenuMiniMap.Checked = False
 End Sub
 
 

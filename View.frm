@@ -31,20 +31,10 @@ Begin VB.Form View
       _ExtentY        =   847
       _StockProps     =   0
    End
-   Begin VB.Image ImageMaid 
-      Height          =   240
-      Index           =   1
-      Left            =   3840
-      Picture         =   "View.frx":0442
-      Top             =   600
-      Visible         =   0   'False
-      Width           =   240
-   End
-   Begin VB.Image ImageMaid 
+   Begin VB.Image SpriteStorage 
       Height          =   240
       Index           =   0
       Left            =   3840
-      Picture         =   "View.frx":058C
       Top             =   240
       Visible         =   0   'False
       Width           =   240
@@ -61,7 +51,6 @@ Begin VB.Form View
       Height          =   975
       Index           =   0
       Left            =   -150
-      Picture         =   "View.frx":06D6
       Stretch         =   -1  'True
       Top             =   120
       Width           =   975
@@ -93,6 +82,12 @@ Begin VB.Form View
          Caption         =   "&Log"
       End
    End
+   Begin VB.Menu MenuOptions 
+      Caption         =   "&Options"
+      Begin VB.Menu MenuDebugLog 
+         Caption         =   "&Debug Log"
+      End
+   End
 End
 Attribute VB_Name = "View"
 Attribute VB_Creatable = False
@@ -105,8 +100,6 @@ Const ViewHHalf = ViewH / 2
 Const Overscan = 80
 
 Const WalkSpeed = 1
-
-Const MaxMobiles = 10
 
 Const WallSideNone = 0
 Const WallSideNS = 2
@@ -126,7 +119,8 @@ Private Type Tilemap
 End Type
 
 Private Type Mobile
-    PictureIdx As Integer
+    SpriteIdx As Integer
+    WalkFrameIdxs(2) As Integer
     TilemapX As Integer
     TilemapY As Integer
     VXStart As Integer
@@ -153,8 +147,10 @@ Dim PlayerDirY As Single
 Dim CameraLensX As Single
 Dim CameraLensY As Single
 Dim Map As Tilemap
-Dim Mobiles(MaxMobiles) As Mobile
+Dim Mobiles() As Mobile
 Dim MobilesActive As Integer
+Dim SpritesStored As Integer
+Dim SpritesActive As Integer
 Dim TilemapWidth As Integer
 Dim TilemapLength As Integer
 
@@ -184,6 +180,17 @@ Private Function InitRayWallDist(RayDir As Single)
     End If
 End Function
 
+Public Function LoadStoredSprite(SpritePath As String) As Integer
+    SpriteStorage(SpritesStored).Picture = LoadPicture(SpritePath)
+    
+    Rem Return the current sprite index and increment the count.
+    LoadStoredSprite = SpritesStored
+    Log.LogDebug "Loaded " & SpritePath & " as stored sprite: " & SpritesStored
+    SpritesStored = SpritesStored + 1
+    Load SpriteStorage(SpritesStored)
+    Log.LogDebug "Incremented stored sprites to: " & SpritesStored
+End Function
+
 Public Sub LoadTilemap(Filename As String)
     Dim FileNo As Long
     Dim LineIn As String
@@ -191,12 +198,11 @@ Public Sub LoadTilemap(Filename As String)
     Dim TileIdx As Integer
     Dim RowIdx As Integer
     
+    TimerAnimate.Enabled = False
+    
     FileNo = FreeFile
     Open Filename For Input Access Read Shared As FileNo
-    
-    Rem Initialize global variables.
-    MobilesActive = 0
-    
+        
     RowIdx = 0
     Do Until EOF(FileNo)
         Line Input #FileNo, LineIn
@@ -204,14 +210,15 @@ Public Sub LoadTilemap(Filename As String)
 
         Rem Parse each line based on what kind of line it is.
         If "floor" = LineArr(0) Then
-            View.Ground.FillColor = Int(LineArr(1))
+            Log.LogDebug "Map ground color: " & LineArr(1)
+            View.Ground.FillColor = LineArr(1)
             
         ElseIf "width" = LineArr(0) Then
-            Rem Log.LogLine "Map width: " & LineArr(1)
+            Log.LogDebug "Map width: " & LineArr(1)
             TilemapWidth = LineArr(1)
             
         ElseIf "height" = LineArr(0) Then
-            Rem Log.LogLine "Map height: " & LineArr(1)
+            Log.LogDebug "Map height: " & LineArr(1)
             TilemapLength = LineArr(1)
             
         ElseIf "map" = LineArr(0) Then
@@ -223,9 +230,23 @@ Public Sub LoadTilemap(Filename As String)
             
         ElseIf "mobile" = LineArr(0) Then
             Rem Create a new mobile.
-            Mobiles(MobilesActive).PictureIdx = LineArr(1)
+            ReDim Preserve Mobiles(MobilesActive + 1)
+            Mobiles(MobilesActive).SpriteIdx = SpritesActive
+            If 0 < SpritesActive Then
+                Log.LogDebug "Creating sprite: " & Mobiles(MobilesActive).SpriteIdx
+                Load Sprites(Mobiles(MobilesActive).SpriteIdx)
+            End If
+            Mobiles(MobilesActive).Frame = 0
             Mobiles(MobilesActive).TilemapX = LineArr(2)
             Mobiles(MobilesActive).TilemapY = LineArr(3)
+            Mobiles(MobilesActive).WalkFrameIdxs(0) = LoadStoredSprite(LineArr(4))
+            Mobiles(MobilesActive).WalkFrameIdxs(1) = LoadStoredSprite(LineArr(5))
+            Log.LogDebug "Loaded mobile " & MobilesActive & "(Sprite " & SpritesActive & "), " & _
+                LineArr(4) & " (" & Mobiles(MobilesActive).WalkFrameIdxs(0) & _
+                ")/" & LineArr(5) & " (" & Mobiles(MobilesActive).WalkFrameIdxs(1) & ") at " & _
+                Mobiles(MobilesActive).TilemapX & ", " & Mobiles(MobilesActive).TilemapY
+            
+            SpritesActive = SpritesActive + 1
             MobilesActive = MobilesActive + 1
             
         ElseIf "start" = LineArr(0) Then
@@ -242,11 +263,12 @@ Public Sub LoadTilemap(Filename As String)
     
     UpdateView
     
+    TimerAnimate.Enabled = True
+    
     Rem Setup Minimap.
     MiniMap.ScaleWidth = TilemapWidth * 3
     MiniMap.ScaleHeight = TilemapLength * 3
 End Sub
-
 Private Sub RotateView(ByVal PlayerCurrentDirX As Single, ByVal CameraCurrentDirX As Single, RotateSpeed As Single)
     Rem Pass the old dir in by value so we can use it in the rotation multiplications below.
     PlayerDirX = (PlayerCurrentDirX * Cos(RotateSpeed)) - (PlayerDirY * Sin(RotateSpeed))
@@ -298,6 +320,7 @@ Public Sub UpdateView()
         Mobiles(MobileIter).VXStart = 0
         Mobiles(MobileIter).VXEnd = 0
         Mobiles(MobileIter).Visible = False
+        Sprites(Mobiles(MobileIter).SpriteIdx).Visible = False
     Next MobileIter
     
     Rem Cast a ray for each pixel-wide vertical line.
@@ -307,19 +330,18 @@ Public Sub UpdateView()
     Rem entirely.
     For VStripeX = -1 * Overscan To ViewW + Overscan
         UpdateViewRay VStripeX, Rays(VStripeX + Overscan)
-        Sprites(Mobiles(MobileIter).PictureIdx).Visible = False
     Next VStripeX
     
     Rem Place picture boxes for visible mobiles.
     For MobileIter = 0 To MobilesActive
         If Mobiles(MobileIter).Visible Then
             MobileWidth = Mobiles(MobileIter).VXEnd - Mobiles(MobileIter).VXStart
-            Sprites(Mobiles(MobileIter).PictureIdx).Left = Mobiles(MobileIter).VXStart
-            Sprites(Mobiles(MobileIter).PictureIdx).Width = MobileWidth
-            Sprites(Mobiles(MobileIter).PictureIdx).Height = MobileWidth
-            Sprites(Mobiles(MobileIter).PictureIdx).Top = ViewHHalf - (MobileWidth / 2)
-            Sprites(Mobiles(MobileIter).PictureIdx).Visible = True
-            Sprites(Mobiles(MobileIter).PictureIdx).ZOrder
+            Sprites(Mobiles(MobileIter).SpriteIdx).Left = Mobiles(MobileIter).VXStart
+            Sprites(Mobiles(MobileIter).SpriteIdx).Width = MobileWidth
+            Sprites(Mobiles(MobileIter).SpriteIdx).Height = MobileWidth
+            Sprites(Mobiles(MobileIter).SpriteIdx).Top = ViewHHalf - (MobileWidth / 2)
+            Sprites(Mobiles(MobileIter).SpriteIdx).Visible = True
+            Sprites(Mobiles(MobileIter).SpriteIdx).ZOrder
         End If
     Next MobileIter
 End Sub
@@ -468,6 +490,11 @@ Private Sub Form_Load()
     Dim Y As Integer
     Dim X As Integer
     
+    Rem No pictures loaded yet.
+    SpritesStored = 0
+    SpritesActive = 0
+    MobilesActive = 0
+    
     Rem Setup wall colors.
     WallColors(WallSideNS, 1) = &HFF0000
     WallColors(WallSideEW, 1) = &H800000
@@ -489,15 +516,15 @@ Private Sub Form_Load()
         DrawVertLine XOff, 0, 0
     Next XOff
     
-    LoadTilemap "arcade.csv"
+    Rem LoadTilemap "arcade.csv"
 
-    MiniMap.Show
+    Rem MiniMap.Show
     Log.Show
 End Sub
 
 
 Private Sub Form_Unload(Cancel As Integer)
-    If menuminimap.Checked Then
+    If MenuMiniMap.Checked Then
         Unload MiniMap
     End If
     If MenuLog.Checked Then
@@ -505,6 +532,14 @@ Private Sub Form_Unload(Cancel As Integer)
     End If
 End Sub
 
+
+Private Sub MenuDebugLog_Click()
+    If MenuDebugLog.Checked Then
+        MenuDebugLog.Checked = False
+    Else
+        MenuDebugLog.Checked = True
+    End If
+End Sub
 
 Private Sub MenuExit_Click()
     Unload View
@@ -514,14 +549,16 @@ End Sub
 Private Sub MenuLog_Click()
     If MenuLog.Checked Then
         Unload Log
+        MenuLog.Checked = False
     Else
         Log.Show
     End If
 End Sub
 
-Private Sub menuminimap_Click()
-    If menuminimap.Checked Then
+Private Sub MenuMiniMap_Click()
+    If MenuMiniMap.Checked Then
         Unload MiniMap
+        MenuMiniMap.Checked = False
     Else
         MiniMap.Show
     End If
@@ -540,13 +577,15 @@ End Sub
 Private Sub TimerAnimate_Timer()
     Dim MobIter As Integer
        
-    For MobIter = 0 To MobilesActive
+    For MobIter = 0 To MobilesActive - 1
         If 0 = Mobiles(MobIter).Frame Then
             Mobiles(MobIter).Frame = 1
         Else
             Mobiles(MobIter).Frame = 0
         End If
-        Sprites(Mobiles(MobIter).PictureIdx).Picture = ImageMaid(Mobiles(MobIter).Frame).Picture
+        Rem Log.LogDebug "Setting Sprite " & Mobiles(MobIter).SpriteIdx & " to Stored Sprite " & Mobiles(MobIter).WalkFrameIdxs(Mobiles(MobIter).Frame)
+        Sprites(Mobiles(MobIter).SpriteIdx).Picture = _
+            SpriteStorage(Mobiles(MobIter).WalkFrameIdxs(Mobiles(MobIter).Frame)).Picture
     Next MobIter
 End Sub
 
