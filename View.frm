@@ -109,7 +109,7 @@ Const WallSideEW = 1
 Const XIdx = 1
 Const YIdx = 2
 
-Dim WallColors(3, 5) As Long
+Dim WallColors() As Long
 
 Private Type TileRow
     Tiles(100) As Integer
@@ -154,6 +154,7 @@ Dim Mobiles() As Mobile
 Dim MobilesActive As Integer
 Dim SpritesStored As Integer
 Dim SpritesActive As Integer
+Dim WallColorsActive As Integer
 Dim TilemapWidth As Integer
 Dim TilemapLength As Integer
 
@@ -228,6 +229,18 @@ Public Sub LoadTilemap(Filename As String)
         ElseIf "height" = LineArr(0) Then
             Log.LogDebug "Map height: " & LineArr(1)
             TilemapLength = LineArr(1)
+            
+        ElseIf "wall" = LineArr(0) Then
+            Rem Load a wall color.
+            If LineArr(1) >= WallColorsActive Then
+                WallColorsActive = LineArr(1) + 1
+                ReDim Preserve WallColors(3, WallColorsActive) As Long
+            End If
+            WallColors(WallSideNS, LineArr(1)) = LineArr(2)
+            WallColors(WallSideEW, LineArr(1)) = LineArr(3)
+            Log.LogDebug "Added wall " & LineArr(1) & _
+                ": NS: " & WallColors(WallSideNS, LineArr(1)) & _
+                ", EW: " & WallColors(WallSideEW, LineArr(1))
             
         ElseIf "map" = LineArr(0) Then
             For TileIdx = 1 To TilemapWidth
@@ -497,23 +510,12 @@ End Sub
 
 Private Sub Form_Load()
     Dim XOff As Integer
-    Dim Y As Integer
-    Dim X As Integer
     
     Rem No pictures loaded yet.
     SpritesStored = 0
     SpritesActive = 0
     MobilesActive = 0
-    
-    Rem Setup wall colors.
-    WallColors(WallSideNS, 1) = &HFF0000
-    WallColors(WallSideEW, 1) = &H800000
-    WallColors(WallSideNS, 2) = &HFF00&
-    WallColors(WallSideEW, 2) = &H8000&
-    WallColors(WallSideNS, 3) = &HFF&
-    WallColors(WallSideEW, 3) = &H80&
-    WallColors(WallSideNS, 4) = &HFF00FF
-    WallColors(WallSideEW, 4) = &H800080
+    WallColorsActive = 0
     
     Rem Setup the wall lines.
     For XOff = 0 To ViewW - 1
@@ -525,8 +527,6 @@ Private Sub Form_Load()
         linWalls(XOff).ZOrder
         DrawVertLine XOff, 0, 0
     Next XOff
-    
-    Rem LoadTilemap "arcade.csv"
 
     Rem MiniMap.Show
     Log.Show
@@ -534,7 +534,7 @@ End Sub
 
 
 Private Sub Form_Unload(Cancel As Integer)
-    If menuminimap.Checked Then
+    If MenuMiniMap.Checked Then
         Unload MiniMap
     End If
     If MenuLog.Checked Then
@@ -566,9 +566,9 @@ Private Sub MenuLog_Click()
 End Sub
 
 Private Sub MenuMiniMap_Click()
-    If menuminimap.Checked Then
+    If MenuMiniMap.Checked Then
         Unload MiniMap
-        menuminimap.Checked = False
+        MenuMiniMap.Checked = False
     Else
         MiniMap.Show
     End If
