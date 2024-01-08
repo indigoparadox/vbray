@@ -1,6 +1,6 @@
 VERSION 4.00
 Begin VB.Form View 
-   BackColor       =   &H00FFFF00&
+   BackColor       =   &H00000000&
    BorderStyle     =   1  'Fixed Single
    Caption         =   "3D View"
    ClientHeight    =   3600
@@ -62,6 +62,7 @@ Begin VB.Form View
       Height          =   2055
       Left            =   0
       Top             =   1800
+      Visible         =   0   'False
       Width           =   4815
    End
    Begin VB.Menu MenuFile 
@@ -119,6 +120,7 @@ Private Type Tilemap
 End Type
 
 Private Type Mobile
+    Name As String
     SpriteIdx As Integer
     WalkFrameIdxs(2) As Integer
     TilemapX As Integer
@@ -127,6 +129,7 @@ Private Type Mobile
     VXEnd As Integer
     Visible As Boolean
     Frame As Integer
+    TalkText As String
 End Type
 
 Private Type Ray
@@ -209,9 +212,14 @@ Public Sub LoadTilemap(Filename As String)
         StringSplit LineIn, ",", LineArr
 
         Rem Parse each line based on what kind of line it is.
-        If "floor" = LineArr(0) Then
-            Log.LogDebug "Map ground color: " & LineArr(1)
+        If "ground" = LineArr(0) Then
+            Log.LogDebug "Ground color: " & LineArr(1)
             View.Ground.FillColor = LineArr(1)
+            View.Ground.Visible = True
+            
+        ElseIf "sky" = LineArr(0) Then
+            Log.LogDebug "Sky color: " & LineArr(1)
+            View.BackColor = LineArr(1)
             
         ElseIf "width" = LineArr(0) Then
             Log.LogDebug "Map width: " & LineArr(1)
@@ -237,10 +245,12 @@ Public Sub LoadTilemap(Filename As String)
                 Load Sprites(Mobiles(MobilesActive).SpriteIdx)
             End If
             Mobiles(MobilesActive).Frame = 0
+            Mobiles(MobilesActive).Name = LineArr(1)
             Mobiles(MobilesActive).TilemapX = LineArr(2)
             Mobiles(MobilesActive).TilemapY = LineArr(3)
             Mobiles(MobilesActive).WalkFrameIdxs(0) = LoadStoredSprite(LineArr(4))
             Mobiles(MobilesActive).WalkFrameIdxs(1) = LoadStoredSprite(LineArr(5))
+            Mobiles(MobilesActive).TalkText = LineArr(6)
             Log.LogDebug "Loaded mobile " & MobilesActive & "(Sprite " & SpritesActive & "), " & _
                 LineArr(4) & " (" & Mobiles(MobilesActive).WalkFrameIdxs(0) & _
                 ")/" & LineArr(5) & " (" & Mobiles(MobilesActive).WalkFrameIdxs(1) & ") at " & _
@@ -316,7 +326,7 @@ Public Sub UpdateView()
     Dim MobileWidth As Integer
     
     Rem Reset all mobiles to off-screen.
-    For MobileIter = 0 To MobilesActive
+    For MobileIter = 0 To MobilesActive - 1
         Mobiles(MobileIter).VXStart = 0
         Mobiles(MobileIter).VXEnd = 0
         Mobiles(MobileIter).Visible = False
@@ -333,7 +343,7 @@ Public Sub UpdateView()
     Next VStripeX
     
     Rem Place picture boxes for visible mobiles.
-    For MobileIter = 0 To MobilesActive
+    For MobileIter = 0 To MobilesActive - 1
         If Mobiles(MobileIter).Visible Then
             MobileWidth = Mobiles(MobileIter).VXEnd - Mobiles(MobileIter).VXStart
             Sprites(Mobiles(MobileIter).SpriteIdx).Left = Mobiles(MobileIter).VXStart
@@ -417,7 +427,7 @@ Private Sub UpdateViewRay(VStripeX As Integer, Ray As Ray)
         End If
         
         Rem Check if this ray passes through a mobile tile.
-        For MobileIter = 0 To MobilesActive
+        For MobileIter = 0 To MobilesActive - 1
             If Mobiles(MobileIter).TilemapX = Ray.Tilemap(XIdx) And _
             Mobiles(MobileIter).TilemapY = Ray.Tilemap(YIdx) Then
                 If Not Mobiles(MobileIter).Visible Then
@@ -524,7 +534,7 @@ End Sub
 
 
 Private Sub Form_Unload(Cancel As Integer)
-    If MenuMiniMap.Checked Then
+    If menuminimap.Checked Then
         Unload MiniMap
     End If
     If MenuLog.Checked Then
@@ -556,9 +566,9 @@ Private Sub MenuLog_Click()
 End Sub
 
 Private Sub MenuMiniMap_Click()
-    If MenuMiniMap.Checked Then
+    If menuminimap.Checked Then
         Unload MiniMap
-        MenuMiniMap.Checked = False
+        menuminimap.Checked = False
     Else
         MiniMap.Show
     End If
@@ -572,6 +582,17 @@ Private Sub MenuOpenTilemap_Click()
     If "" <> dialog.Filename Then
         LoadTilemap dialog.Filename
     End If
+End Sub
+
+Private Sub Sprites_Click(Index As Integer)
+    Dim MobileIter As Integer
+    
+    For MobileIter = 0 To MobilesActive - 1
+        If Index = Mobiles(MobileIter).SpriteIdx Then
+            Log.LogTalk Mobiles(MobileIter).Name, Mobiles(MobileIter).TalkText
+            Exit Sub
+        End If
+    Next MobileIter
 End Sub
 
 Private Sub TimerAnimate_Timer()

@@ -28,18 +28,22 @@ Attribute VB_Name = "Log"
 Attribute VB_Creatable = False
 Attribute VB_Exposed = False
 
+Public Sub LogTalk(Name As String, Message As String)
+    LogText.Text = Name & ": " & Message & vbCrLf & LogText.Text
+End Sub
+
 Private Sub Form_Load()
     View.MenuLog.Checked = True
 End Sub
 
 Private Sub Form_Resize()
-    logtext.Width = Log.Width - 115
-    logtext.Height = Log.Height - 405
+    LogText.Width = Log.Width - 115
+    LogText.Height = Log.Height - 405
 End Sub
 
 Public Sub LogDebug(Message As String)
     If View.MenuDebugLog.Checked Then
-        logtext.Text = Message & vbCrLf & logtext.Text
+        LogText.Text = Message & vbCrLf & LogText.Text
     End If
 End Sub
 
