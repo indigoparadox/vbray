@@ -109,8 +109,6 @@ Const WallSideEW = 1
 Const XIdx = 1
 Const YIdx = 2
 
-Dim WallColors() As Long
-
 Private Type TileRow
     Tiles(100) As Integer
 End Type
@@ -132,6 +130,18 @@ Private Type Mobile
     TalkText As String
 End Type
 
+Private Type Warp
+    TargetTilemap As String
+    TargetX As Integer
+    TargetY As Integer
+    TargetDirX As Single
+    TargetDirY As Single
+    TargetCameraLensX As Single
+    TargetCameraLensY As Single
+    SourceX As Integer
+    SourceY As Integer
+End Type
+
 Private Type Ray
     Dir(3) As Single
     Tilemap(3) As Integer
@@ -143,21 +153,40 @@ Private Type Ray
     SpriteIdx As Integer
 End Type
 
+Rem Player properties.
 Dim PlayerX As Single
 Dim PlayerY As Single
 Dim PlayerDirX As Single
 Dim PlayerDirY As Single
 Dim CameraLensX As Single
 Dim CameraLensY As Single
-Dim Map As Tilemap
+
+Rem Other mobile properties.
 Dim Mobiles() As Mobile
 Dim MobilesActive As Integer
 Dim SpritesStored As Integer
 Dim SpritesActive As Integer
-Dim WallColorsActive As Integer
+
+Rem Tilemap properties.
+Dim Map As Tilemap
 Dim TilemapWidth As Integer
 Dim TilemapLength As Integer
+Dim WallColors() As Long
+Dim WallColorsActive As Integer
 
+Rem Warps currently on tilemap.
+Dim Warps() As Warp
+Dim WarpsActive As Integer
+
+Rem Used to set player X/Y on warp.
+Dim Warping As Boolean
+Dim WarpTilemap As String
+Dim ForceStartX As Integer
+Dim ForceStartY As Integer
+Dim ForceStartDirX As Single
+Dim ForceStartDirY As Single
+Dim ForceStartCameraLensX As Single
+Dim ForceStartCameraLensY As Single
 Private Sub DrawWall(Ray As Ray, ByVal VStripeX As Integer, ByVal CoordIdx As Integer)
     Dim WallDist As Single
 
@@ -166,6 +195,10 @@ Private Sub DrawWall(Ray As Ray, ByVal VStripeX As Integer, ByVal CoordIdx As In
     Rem Make sure we don't divide by zero when too close to a wall below!
     If WallDist < 0.0001 Then
         WallDist = 0.0001
+    End If
+    
+    If Ray.WallColorIdx > WallColorsActive Then
+        Exit Sub
     End If
     
     Rem Draw the wall line and minimap ray.
@@ -203,6 +236,7 @@ Public Sub LoadTilemap(Filename As String)
     Dim RowIdx As Integer
     
     TimerAnimate.Enabled = False
+    UnloadTilemap
     
     FileNo = FreeFile
     Open Filename For Input Access Read Shared As FileNo
@@ -251,7 +285,7 @@ Public Sub LoadTilemap(Filename As String)
             
         ElseIf "mobile" = LineArr(0) Then
             Rem Create a new mobile.
-            ReDim Preserve Mobiles(MobilesActive + 1)
+            ReDim Preserve Mobiles(MobilesActive + 1) As Mobile
             Mobiles(MobilesActive).SpriteIdx = SpritesActive
             If 0 < SpritesActive Then
                 Log.LogDebug "Creating sprite: " & Mobiles(MobilesActive).SpriteIdx
@@ -272,17 +306,46 @@ Public Sub LoadTilemap(Filename As String)
             SpritesActive = SpritesActive + 1
             MobilesActive = MobilesActive + 1
             
+        ElseIf "warp" = LineArr(0) Then
+            ReDim Preserve Warps(WarpsActive + 1) As Warp
+            Warps(WarpsActive).SourceX = LineArr(1)
+            Warps(WarpsActive).SourceY = LineArr(2)
+            Warps(WarpsActive).TargetX = LineArr(4)
+            Warps(WarpsActive).TargetY = LineArr(5)
+            Warps(WarpsActive).TargetDirX = LineArr(6)
+            Warps(WarpsActive).TargetDirY = LineArr(7)
+            Warps(WarpsActive).TargetCameraLensX = LineArr(8)
+            Warps(WarpsActive).TargetCameraLensY = LineArr(9)
+            Warps(WarpsActive).TargetTilemap = LineArr(3)
+            Log.LogDebug "Loaded warp (" & Warps(WarpsActive).SourceX & ", " & Warps(WarpsActive).SourceY & _
+                ") to " & Warps(WarpsActive).TargetTilemap & " (" & Warps(WarpsActive).TargetX & ", " & Warps(WarpsActive).TargetY & ")"
+            WarpsActive = WarpsActive + 1
+            
         ElseIf "start" = LineArr(0) Then
             Rem Set player starting position.
-            PlayerX = LineArr(1)
-            PlayerY = LineArr(2)
-            PlayerDirX = LineArr(3)
-            PlayerDirY = LineArr(4)
-            CameraLensX = LineArr(5)
-            CameraLensY = LineArr(6)
-
+            If Warping Then
+                Log.LogDebug "Starting at warp target: " & WarpTilemap & ": " & ForceStartX & ", " & ForceStartY
+                PlayerX = ForceStartX
+                PlayerY = ForceStartY
+                PlayerDirX = ForceStartDirX
+                PlayerDirY = ForceStartDirY
+                CameraLensX = ForceStartCameraLensX
+                CameraLensY = ForceStartCameraLensY
+            Else
+                Log.LogDebug "Starting at: " & LineArr(1) & ", " & LineArr(2)
+                PlayerX = LineArr(1)
+                PlayerY = LineArr(2)
+                PlayerDirX = LineArr(3)
+                PlayerDirY = LineArr(4)
+                CameraLensX = LineArr(5)
+                CameraLensY = LineArr(6)
+            End If
         End If
     Loop
+    
+    Rem Set warping false so UpdateView below works, but do it after load or
+    Rem "start" lines above won't work properly.
+    Warping = False
     
     UpdateView
     
@@ -298,6 +361,8 @@ Private Sub RotateView(ByVal PlayerCurrentDirX As Single, ByVal CameraCurrentDir
     PlayerDirY = (PlayerCurrentDirX * Sin(RotateSpeed)) + (PlayerDirY * Cos(RotateSpeed))
     CameraLensX = (CameraCurrentDirX * Cos(RotateSpeed)) - (CameraLensY * Sin(RotateSpeed))
     CameraLensY = (CameraCurrentDirX * Sin(RotateSpeed)) + (CameraLensY * Cos(RotateSpeed))
+    Log.LogDebug "New DirX: " & PlayerDirX & ", DirY: " & PlayerDirY & ", " & _
+        "CameraLensX: " & CameraLensX & ", CameraLensY: " & CameraLensY
     UpdateView
 End Sub
 
@@ -330,6 +395,31 @@ Public Sub StringSplit(Haystack As String, Needle As String, StringsOut() As Str
         End If
         LastNeedle = ThisNeedle + 1
     Loop
+End Sub
+
+Public Sub UnloadTilemap()
+    Dim Iter As Integer
+    
+    Rem Clear out sprite storage.
+    For Iter = 1 To SpritesStored
+        Unload SpriteStorage(Iter)
+    Next Iter
+    SpritesStored = 0
+    
+    Rem Return sprite display images to initial state.
+    Sprites(0).Visible = False
+    For Iter = 1 To SpritesActive - 1
+        Unload Sprites(Iter)
+    Next Iter
+    SpritesActive = 0
+    
+    Rem Clear out mobiles.
+    MobilesActive = 0
+    ReDim Mobiles(MobilesActive) As Mobile
+    
+    Rem Clear out wall colors.
+    WallColorsActive = 0
+    ReDim WallColors(3, WallColorsActive) As Long
 End Sub
 
 Public Sub UpdateView()
@@ -475,6 +565,7 @@ Public Sub WalkView(Distance As Single)
     Dim DistanceY As Single
     Dim NewX As Single
     Dim NewY As Single
+    Dim WarpIter As Integer
     
     Rem PlayerDir* are precalculated to increment rays, so walking is just another "ray"!
     NewX = PlayerX + (Distance * PlayerDirX)
@@ -485,7 +576,25 @@ Public Sub WalkView(Distance As Single)
         PlayerY = NewY
     End If
     
-    UpdateView
+    For WarpIter = 0 To WarpsActive - 1
+        If Int(NewX) = Warps(WarpIter).SourceX And Int(NewY) = Warps(WarpIter).SourceY Then
+            ForceStartX = Warps(WarpIter).TargetX
+            ForceStartY = Warps(WarpIter).TargetY
+            ForceStartDirX = Warps(WarpIter).TargetDirX
+            ForceStartDirY = Warps(WarpIter).TargetDirY
+            ForceStartCameraLensX = Warps(WarpIter).TargetCameraLensX
+            ForceStartCameraLensY = Warps(WarpIter).TargetCameraLensY
+            WarpTilemap = Warps(WarpIter).TargetTilemap
+            Log.LogDebug "Set warp target to " & WarpTilemap & ": " & ForceStartX & ", " & ForceStartY
+            Warping = True
+        End If
+    Next WarpIter
+    
+    If Warping Then
+        LoadTilemap WarpTilemap
+    Else
+        UpdateView
+    End If
 End Sub
 
 Private Sub Form_KeyPress(KeyAscii As Integer)
@@ -516,6 +625,7 @@ Private Sub Form_Load()
     SpritesActive = 0
     MobilesActive = 0
     WallColorsActive = 0
+    Warping = False
     
     Rem Setup the wall lines.
     For XOff = 0 To ViewW - 1
