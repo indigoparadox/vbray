@@ -347,13 +347,14 @@ Public Sub LoadTilemap(Filename As String)
     Rem "start" lines above won't work properly.
     Warping = False
     
+    Rem Setup Minimap.
+    MiniMap.Show
+    MiniMap.ScaleWidth = TilemapWidth * 3
+    MiniMap.ScaleHeight = TilemapLength * 3
+    
     UpdateView
     
     TimerAnimate.Enabled = True
-    
-    Rem Setup Minimap.
-    MiniMap.ScaleWidth = TilemapWidth * 3
-    MiniMap.ScaleHeight = TilemapLength * 3
 End Sub
 Private Sub RotateView(ByVal PlayerCurrentDirX As Single, ByVal CameraCurrentDirX As Single, RotateSpeed As Single)
     Rem Pass the old dir in by value so we can use it in the rotation multiplications below.
