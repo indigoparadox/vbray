@@ -18,6 +18,11 @@ Begin VB.Form View
    ScaleWidth      =   320
    Top             =   1830
    Width           =   4920
+   Begin VB.Timer TimerUnlockMouse 
+      Interval        =   50
+      Left            =   2400
+      Top             =   840
+   End
    Begin VB.Timer TimerAnimate 
       Interval        =   500
       Left            =   1800
@@ -88,6 +93,9 @@ Begin VB.Form View
       Begin VB.Menu MenuDebugLog 
          Caption         =   "&Debug Log"
       End
+      Begin VB.Menu MenuMouseNav 
+         Caption         =   "&Mouse Navigation"
+      End
    End
 End
 Attribute VB_Name = "View"
@@ -152,6 +160,10 @@ Private Type Ray
     WallSide As Integer
     SpriteIdx As Integer
 End Type
+
+Dim LastMouseX As Single
+Dim LastMouseY As Single
+Dim MouseLocked As Boolean
 
 Rem Player properties.
 Dim PlayerX As Single
@@ -627,6 +639,8 @@ Private Sub Form_Load()
     MobilesActive = 0
     WallColorsActive = 0
     Warping = False
+    LastMouseX = 0
+    LastMouseY = 0
     
     Rem Setup the wall lines.
     For XOff = 0 To ViewW - 1
@@ -641,6 +655,28 @@ Private Sub Form_Load()
 
     Rem MiniMap.Show
     Log.Show
+End Sub
+
+
+Private Sub Form_MouseMove(Button As Integer, Shift As Integer, X As Single, Y As Single)
+    If MouseLocked Or Not MenuMouseNav.Checked Then
+        Exit Sub
+    End If
+
+    If 1 = Button Then
+        If Y < LastMouseY - 1 Then
+            WalkView 1
+        ElseIf Y > LastMouseY + 1 Then
+            WalkView -1
+        ElseIf X < LastMouseX Then
+            RotateView PlayerDirX, CameraLensX, 0.33
+        ElseIf X > LastMouseX Then
+            RotateView PlayerDirX, CameraLensX, -0.33
+        End If
+        MouseLocked = True
+    End If
+    LastMouseX = X
+    LastMouseY = Y
 End Sub
 
 
@@ -686,6 +722,14 @@ Private Sub MenuMiniMap_Click()
 End Sub
 
 
+Private Sub MenuMouseNav_Click()
+    If Not MenuMouseNav.Checked Then
+        MenuMouseNav.Checked = True
+    Else
+        MenuMouseNav.Checked = False
+    End If
+End Sub
+
 Private Sub MenuOpenTilemap_Click()
     dialog.DialogTitle = "Open Tilemap"
     dialog.Filter = "Comma-Separated Values (*.csv)|*.csv"
@@ -719,6 +763,11 @@ Private Sub TimerAnimate_Timer()
         Sprites(Mobiles(MobIter).SpriteIdx).Picture = _
             SpriteStorage(Mobiles(MobIter).WalkFrameIdxs(Mobiles(MobIter).Frame)).Picture
     Next MobIter
+End Sub
+
+
+Private Sub TimerUnlockMouse_Timer()
+    MouseLocked = False
 End Sub
 
 
