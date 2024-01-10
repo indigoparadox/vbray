@@ -231,7 +231,8 @@ Private Sub DrawWall(Ray As Ray, ByVal VStripeX As Integer, ByVal CoordIdx As In
     Rem Draw the wall line and minimap ray.
     DrawVertLine VStripeX, ViewH / WallDist, WallColors(CoordIdx, Ray.WallColorIdx)
     If MenuMiniMap.Checked Then
-        MiniMap.RayEnd VStripeX, Ray.Tilemap(XIdx), Ray.Tilemap(YIdx), WallColors(CoordIdx, Ray.WallColorIdx)
+        Rem Reverse X for minimap.
+        MiniMap.RayEnd VStripeX, Map.Width - Ray.Tilemap(XIdx), Ray.Tilemap(YIdx), WallColors(CoordIdx, Ray.WallColorIdx)
     End If
     Rem Log.LogLine "Ended at: " & Ray.Tilemap(XIdx) & ", " & Ray.Tilemap(YIdx)
 End Sub
@@ -375,6 +376,12 @@ Public Sub LoadTilemap(Filename As String)
     Rem Set warping false so UpdateView below works, but do it after load or
     Rem "start" lines above won't work properly.
     Warping = False
+    
+    If MenuMiniMap.Checked Then
+        Rem Rescale the mini map if it's open.
+        MiniMap.SetupLines ViewW, Map.Width, Map.Length, True
+        MiniMap.SetupLines ViewW, Map.Width, Map.Length, False
+    End If
     
     UpdateView
     
@@ -537,7 +544,8 @@ Private Sub UpdateViewRay(VStripeX As Integer, Ray As Ray)
     Ray.Tilemap(XIdx) = PlayerX
     Ray.Tilemap(YIdx) = PlayerY
     If 0 <= VStripeX And VStripeX < ViewW And MenuMiniMap.Checked Then
-        MiniMap.RayStart VStripeX, PlayerX, PlayerY
+        Rem Reverse X for minimap.
+        MiniMap.RayStart VStripeX, Map.Width - PlayerX, PlayerY
     End If
     
     Rem Set initial distance to next wall based on ray angle hypoteneuse.
