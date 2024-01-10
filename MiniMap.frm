@@ -30,6 +30,10 @@ End
 Attribute VB_Name = "MiniMap"
 Attribute VB_Creatable = False
 Attribute VB_Exposed = False
+Option Explicit
+
+
+
 
 Public Sub RayStart(Idx As Integer, ByVal X As Single, ByVal Y As Single)
     Rays(Idx).X1 = X * 3
@@ -42,22 +46,34 @@ Public Sub RayEnd(Idx As Integer, ByVal X As Single, ByVal Y As Single, ByVal Co
     Rays(Idx).BorderColor = Color
     Rays(Idx).Visible = True
 End Sub
-Private Sub Form_Load()
+Public Sub SetupLines(ViewW As Integer, TilemapW As Integer, TilemapH As Integer, UnloadLines As Boolean)
     Dim XOff As Integer
     
-    Rem TODO: Get rid of this!
-    Const ViewW = 320
+    If 0 < TilemapW Then
+        ScaleWidth = TilemapW * 3
+    End If
+    If 0 < TilemapH Then
+        ScaleHeight = TilemapH * 3
+    End If
     
     Rem Setup the wall lines.
     For XOff = 0 To ViewW - 1
         Rem Expand control array as needed.
         If XOff > 0 Then
-            Load Rays(XOff)
+            If UnloadLines Then
+                Unload Rays(XOff)
+            Else
+                Load Rays(XOff)
+            End If
         End If
-        Rem Bring to front.
-        Rays(XOff).ZOrder
+        If Not UnloadLines Then
+            Rem Bring to front.
+            Rays(XOff).ZOrder
+        End If
     Next XOff
-    
+End Sub
+
+Private Sub Form_Load()
     View.MenuMiniMap.Checked = True
 End Sub
 

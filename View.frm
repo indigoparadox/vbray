@@ -4,19 +4,19 @@ Begin VB.Form View
    BorderStyle     =   1  'Fixed Single
    Caption         =   "3D View"
    ClientHeight    =   3600
-   ClientLeft      =   5205
-   ClientTop       =   2460
+   ClientLeft      =   3765
+   ClientTop       =   2655
    ClientWidth     =   4800
    Height          =   4290
    Icon            =   "View.frx":0000
-   Left            =   5145
+   Left            =   3705
    LinkTopic       =   "Form1"
    MaxButton       =   0   'False
    MinButton       =   0   'False
    ScaleHeight     =   240
    ScaleMode       =   3  'Pixel
    ScaleWidth      =   320
-   Top             =   1830
+   Top             =   2025
    Width           =   4920
    Begin VB.Timer TimerUnlockMouse 
       Interval        =   50
@@ -90,6 +90,15 @@ Begin VB.Form View
    End
    Begin VB.Menu MenuOptions 
       Caption         =   "&Options"
+      Begin VB.Menu MenuHalfResolution 
+         Caption         =   "&Half Resolution"
+      End
+      Begin VB.Menu MenuQuarterResolution 
+         Caption         =   "&Quarter Resolution"
+      End
+      Begin VB.Menu MenuOptionsDiv1 
+         Caption         =   "-"
+      End
       Begin VB.Menu MenuDebugLog 
          Caption         =   "&Debug Log"
       End
@@ -103,11 +112,6 @@ Attribute VB_Creatable = False
 Attribute VB_Exposed = False
 Option Explicit
 
-Const ViewW = 320
-Const ViewH = 240
-Const ViewHHalf = ViewH / 2
-Const Overscan = 80
-
 Const WalkSpeed = 1
 
 Const WallSideNone = 0
@@ -117,12 +121,15 @@ Const WallSideEW = 1
 Const XIdx = 1
 Const YIdx = 2
 
+
 Private Type TileRow
     Tiles(100) As Integer
 End Type
 
 Private Type Tilemap
     Rows(100) As TileRow
+    Width As Integer
+    Length As Integer
 End Type
 
 Private Type Mobile
@@ -161,6 +168,13 @@ Private Type Ray
     SpriteIdx As Integer
 End Type
 
+Dim ViewW As Integer
+Dim ViewH As Integer
+Dim ViewHHalf As Integer
+Dim Overscan As Integer
+Dim LineWMult As Integer
+Dim Rays() As Ray
+
 Dim LastMouseX As Single
 Dim LastMouseY As Single
 Dim MouseLocked As Boolean
@@ -181,8 +195,6 @@ Dim SpritesActive As Integer
 
 Rem Tilemap properties.
 Dim Map As Tilemap
-Dim TilemapWidth As Integer
-Dim TilemapLength As Integer
 Dim WallColors() As Long
 Dim WallColorsActive As Integer
 
@@ -199,6 +211,8 @@ Dim ForceStartDirX As Single
 Dim ForceStartDirY As Single
 Dim ForceStartCameraLensX As Single
 Dim ForceStartCameraLensY As Single
+
+
 Private Sub DrawWall(Ray As Ray, ByVal VStripeX As Integer, ByVal CoordIdx As Integer)
     Dim WallDist As Single
 
@@ -215,7 +229,9 @@ Private Sub DrawWall(Ray As Ray, ByVal VStripeX As Integer, ByVal CoordIdx As In
     
     Rem Draw the wall line and minimap ray.
     DrawVertLine VStripeX, ViewH / WallDist, WallColors(CoordIdx, Ray.WallColorIdx)
-    MiniMap.RayEnd VStripeX, Ray.Tilemap(XIdx), Ray.Tilemap(YIdx), WallColors(CoordIdx, Ray.WallColorIdx)
+    If MenuMiniMap.Checked Then
+        MiniMap.RayEnd VStripeX, Ray.Tilemap(XIdx), Ray.Tilemap(YIdx), WallColors(CoordIdx, Ray.WallColorIdx)
+    End If
     Rem Log.LogLine "Ended at: " & Ray.Tilemap(XIdx) & ", " & Ray.Tilemap(YIdx)
 End Sub
 
@@ -270,11 +286,11 @@ Public Sub LoadTilemap(Filename As String)
             
         ElseIf "width" = LineArr(0) Then
             Log.LogDebug "Map width: " & LineArr(1)
-            TilemapWidth = LineArr(1)
+            Map.Width = LineArr(1)
             
         ElseIf "height" = LineArr(0) Then
             Log.LogDebug "Map height: " & LineArr(1)
-            TilemapLength = LineArr(1)
+            Map.Length = LineArr(1)
             
         ElseIf "wall" = LineArr(0) Then
             Rem Load a wall color.
@@ -289,8 +305,8 @@ Public Sub LoadTilemap(Filename As String)
                 ", EW: " & WallColors(WallSideEW, LineArr(1))
             
         ElseIf "map" = LineArr(0) Then
-            For TileIdx = 1 To TilemapWidth
-                Rem TODO: Verify that the array is really TilemapWidth + 1 tiles long first.
+            For TileIdx = 1 To Map.Width
+                Rem TODO: Verify that the array is really Map.Width + 1 tiles long first.
                 Map.Rows(RowIdx).Tiles(TileIdx - 1) = LineArr(TileIdx)
             Next TileIdx
             RowIdx = RowIdx + 1
@@ -359,11 +375,6 @@ Public Sub LoadTilemap(Filename As String)
     Rem "start" lines above won't work properly.
     Warping = False
     
-    Rem Setup Minimap.
-    MiniMap.Show
-    MiniMap.ScaleWidth = TilemapWidth * 3
-    MiniMap.ScaleHeight = TilemapLength * 3
-    
     UpdateView
     
     TimerAnimate.Enabled = True
@@ -379,6 +390,42 @@ Private Sub RotateView(ByVal PlayerCurrentDirX As Single, ByVal CameraCurrentDir
     UpdateView
 End Sub
 
+
+Public Sub SetupLines(UnloadLines As Boolean)
+    Dim XOff As Integer
+
+    Rem Setup the wall lines.
+    For XOff = 0 To ViewW - 1
+        Rem Expand control array as needed.
+        If XOff > 0 Then
+            If UnloadLines Then
+                Unload linWalls(XOff)
+            Else
+                Load linWalls(XOff)
+            End If
+        End If
+        If Not UnloadLines Then
+            Rem Bring to front.
+            linWalls(XOff).ZOrder
+            DrawVertLine XOff, 0, 0
+        End If
+    Next XOff
+    
+    If MenuMiniMap.Checked Then
+        MiniMap.SetupLines ViewW, Map.Width, Map.Length, UnloadLines
+    End If
+End Sub
+
+Public Sub SetupScreen(ViewWIn As Integer, ViewHIn As Integer, OverscanIn As Integer, LineWMultIn As Integer)
+    SetupLines True
+    ViewW = ViewWIn
+    ViewH = ViewHIn
+    ViewHHalf = ViewH / 2
+    Overscan = OverscanIn
+    LineWMult = LineWMultIn
+    ReDim Rays(ViewW + (2 * Overscan))
+    SetupLines False
+End Sub
 
 Public Sub StringSplit(Haystack As String, Needle As String, StringsOut() As String)
     Dim NewHaystack As String
@@ -437,7 +484,6 @@ End Sub
 
 Public Sub UpdateView()
     Dim VStripeX As Integer
-    Dim Rays(ViewW + (2 * Overscan)) As Ray
     Dim MobileIter As Integer
     Dim MobileWidth As Integer
     
@@ -461,8 +507,8 @@ Public Sub UpdateView()
     Rem Place picture boxes for visible mobiles.
     For MobileIter = 0 To MobilesActive - 1
         If Mobiles(MobileIter).Visible Then
-            MobileWidth = Mobiles(MobileIter).VXEnd - Mobiles(MobileIter).VXStart
-            Sprites(Mobiles(MobileIter).SpriteIdx).Left = Mobiles(MobileIter).VXStart
+            MobileWidth = (Mobiles(MobileIter).VXEnd - Mobiles(MobileIter).VXStart) * LineWMult
+            Sprites(Mobiles(MobileIter).SpriteIdx).Left = Mobiles(MobileIter).VXStart * LineWMult
             Sprites(Mobiles(MobileIter).SpriteIdx).Width = MobileWidth
             Sprites(Mobiles(MobileIter).SpriteIdx).Height = MobileWidth
             Sprites(Mobiles(MobileIter).SpriteIdx).Top = ViewHHalf - (MobileWidth / 2)
@@ -489,7 +535,7 @@ Private Sub UpdateViewRay(VStripeX As Integer, Ray As Ray)
     Rem Set tilemap tile ray is in based on player position.
     Ray.Tilemap(XIdx) = PlayerX
     Ray.Tilemap(YIdx) = PlayerY
-    If 0 <= VStripeX And VStripeX < ViewW Then
+    If 0 <= VStripeX And VStripeX < ViewW And MenuMiniMap.Checked Then
         MiniMap.RayStart VStripeX, PlayerX, PlayerY
     End If
     
@@ -531,7 +577,7 @@ Private Sub UpdateViewRay(VStripeX As Integer, Ray As Ray)
         End If
         
         Rem Check if there was actually a collision.
-        If 0 <= Ray.Tilemap(XIdx) And TilemapWidth > Ray.Tilemap(XIdx) And 0 <= Ray.Tilemap(YIdx) And TilemapLength > Ray.Tilemap(YIdx) Then
+        If 0 <= Ray.Tilemap(XIdx) And Map.Width > Ray.Tilemap(XIdx) And 0 <= Ray.Tilemap(YIdx) And Map.Length > Ray.Tilemap(YIdx) Then
             Ray.WallColorIdx = Map.Rows(Int(Ray.Tilemap(XIdx))).Tiles(Int(Ray.Tilemap(YIdx)))
             If 0 = Ray.WallColorIdx Then
                 Rem In a cell with no wall.
@@ -567,8 +613,9 @@ End Sub
 Public Sub DrawVertLine(XOff As Integer, YHeight As Single, ByVal Color As Long)
     linWalls(XOff).Y1 = ViewHHalf - (YHeight / 2)
     linWalls(XOff).Y2 = ViewHHalf + (YHeight / 2)
-    linWalls(XOff).X1 = XOff
-    linWalls(XOff).X2 = XOff
+    linWalls(XOff).X1 = XOff * LineWMult
+    linWalls(XOff).X2 = XOff * LineWMult
+    linWalls(XOff).BorderWidth = LineWMult
     linWalls(XOff).Visible = True
     linWalls(XOff).BorderColor = Color
 End Sub
@@ -612,26 +659,34 @@ End Sub
 
 Private Sub Form_KeyPress(KeyAscii As Integer)
     Dim PrevX As Single
+    
+    If MouseLocked Then
+        Exit Sub
+    End If
+    
     If KeyAscii = 97 Then
         Rem 'a'
         RotateView PlayerDirX, CameraLensX, 0.33
+        MouseLocked = True
     
     ElseIf KeyAscii = 100 Then
         Rem 'd'
         RotateView PlayerDirX, CameraLensX, -0.33
+        MouseLocked = True
     
     ElseIf KeyAscii = 119 Then
         Rem 'w'
         WalkView 1
+        MouseLocked = True
     
     ElseIf KeyAscii = 115 Then
         Rem 's'
         WalkView -1
+        MouseLocked = True
     End If
 End Sub
 
 Private Sub Form_Load()
-    Dim XOff As Integer
     
     Rem No pictures loaded yet.
     SpritesStored = 0
@@ -641,22 +696,13 @@ Private Sub Form_Load()
     Warping = False
     LastMouseX = 0
     LastMouseY = 0
+    Map.Width = 0
+    Map.Length = 0
     
-    Rem Setup the wall lines.
-    For XOff = 0 To ViewW - 1
-        Rem Expand control array as needed.
-        If XOff > 0 Then
-            Load linWalls(XOff)
-        End If
-        Rem Bring to front.
-        linWalls(XOff).ZOrder
-        DrawVertLine XOff, 0, 0
-    Next XOff
+    SetupScreen 320, 240, 80, 1
 
-    Rem MiniMap.Show
     Log.Show
 End Sub
-
 
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, X As Single, Y As Single)
     If MouseLocked Or Not MenuMouseNav.Checked Then
@@ -703,6 +749,19 @@ Private Sub MenuExit_Click()
 End Sub
 
 
+Private Sub MenuHalfResolution_Click()
+    If MenuHalfResolution.Checked Then
+        SetupScreen 320, 240, 80, 1
+        MenuHalfResolution.Checked = False
+    Else
+        MenuQuarterResolution.Checked = False
+        SetupScreen 160, 240, 40, 2
+        MenuHalfResolution.Checked = True
+    End If
+    Log.LogDebug "Horizontal resolution changed to: " & ViewW
+    UpdateView
+End Sub
+
 Private Sub MenuLog_Click()
     If MenuLog.Checked Then
         Unload Log
@@ -718,6 +777,10 @@ Private Sub MenuMiniMap_Click()
         MenuMiniMap.Checked = False
     Else
         MiniMap.Show
+        MiniMap.SetupLines ViewW, Map.Width, Map.Length, False
+        
+        Rem Refresh the view so the minimap redraws its lines.
+        UpdateView
     End If
 End Sub
 
@@ -737,6 +800,19 @@ Private Sub MenuOpenTilemap_Click()
     If "" <> dialog.Filename Then
         LoadTilemap dialog.Filename
     End If
+End Sub
+
+Private Sub MenuQuarterResolution_Click()
+    If MenuQuarterResolution.Checked Then
+        SetupScreen 320, 240, 80, 1
+        MenuQuarterResolution.Checked = False
+    Else
+        MenuHalfResolution.Checked = False
+        SetupScreen 80, 240, 40, 4
+        MenuQuarterResolution.Checked = True
+    End If
+    Log.LogDebug "Horizontal resolution changed to: " & ViewW
+    UpdateView
 End Sub
 
 Private Sub Sprites_Click(Index As Integer)
