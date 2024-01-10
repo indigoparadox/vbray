@@ -4,19 +4,19 @@ Begin VB.Form View
    BorderStyle     =   1  'Fixed Single
    Caption         =   "3D View"
    ClientHeight    =   3600
-   ClientLeft      =   3765
-   ClientTop       =   2655
+   ClientLeft      =   5235
+   ClientTop       =   2475
    ClientWidth     =   4800
    Height          =   4290
    Icon            =   "View.frx":0000
-   Left            =   3705
+   Left            =   5175
    LinkTopic       =   "Form1"
    MaxButton       =   0   'False
    MinButton       =   0   'False
    ScaleHeight     =   240
    ScaleMode       =   3  'Pixel
    ScaleWidth      =   320
-   Top             =   2025
+   Top             =   1845
    Width           =   4920
    Begin VB.Timer TimerUnlockMouse 
       Interval        =   50
@@ -121,6 +121,7 @@ Const WallSideEW = 1
 Const XIdx = 1
 Const YIdx = 2
 
+Const MouseDeadZone = 5
 
 Private Type TileRow
     Tiles(100) As Integer
@@ -704,25 +705,28 @@ Private Sub Form_Load()
     Log.Show
 End Sub
 
+Private Sub Form_MouseDown(Button As Integer, Shift As Integer, X As Single, Y As Single)
+    LastMouseX = X
+    LastMouseY = Y
+End Sub
+
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, X As Single, Y As Single)
     If MouseLocked Or Not MenuMouseNav.Checked Then
         Exit Sub
     End If
 
     If 1 = Button Then
-        If Y < LastMouseY - 1 Then
+        If Y < LastMouseY - MouseDeadZone Then
             WalkView 1
-        ElseIf Y > LastMouseY + 1 Then
+        ElseIf Y > LastMouseY + MouseDeadZone Then
             WalkView -1
-        ElseIf X < LastMouseX Then
+        ElseIf X < LastMouseX - MouseDeadZone Then
             RotateView PlayerDirX, CameraLensX, 0.33
-        ElseIf X > LastMouseX Then
+        ElseIf X > LastMouseX + MouseDeadZone Then
             RotateView PlayerDirX, CameraLensX, -0.33
         End If
         MouseLocked = True
     End If
-    LastMouseX = X
-    LastMouseY = Y
 End Sub
 
 
