@@ -18,8 +18,13 @@ Begin VB.Form View
    ScaleWidth      =   320
    Top             =   1845
    Width           =   4920
-   Begin VB.Timer TimerUnlockMouse 
+   Begin VB.Timer TimerUnlockKeyboard 
       Interval        =   50
+      Left            =   3000
+      Top             =   840
+   End
+   Begin VB.Timer TimerUnlockMouse 
+      Interval        =   250
       Left            =   2400
       Top             =   840
    End
@@ -179,6 +184,7 @@ Dim Rays() As Ray
 Dim LastMouseX As Single
 Dim LastMouseY As Single
 Dim MouseLocked As Boolean
+Dim KeyboardLocked As Boolean
 
 Rem Player properties.
 Dim PlayerX As Single
@@ -669,28 +675,32 @@ End Sub
 Private Sub Form_KeyPress(KeyAscii As Integer)
     Dim PrevX As Single
     
-    If MouseLocked Then
+    If KeyboardLocked Then
         Exit Sub
     End If
     
     If KeyAscii = 97 Then
         Rem 'a'
         RotateView PlayerDirX, CameraLensX, 0.33
+        KeyboardLocked = True
         MouseLocked = True
     
     ElseIf KeyAscii = 100 Then
         Rem 'd'
         RotateView PlayerDirX, CameraLensX, -0.33
+        KeyboardLocked = True
         MouseLocked = True
     
     ElseIf KeyAscii = 119 Then
         Rem 'w'
         WalkView 1
+        KeyboardLocked = True
         MouseLocked = True
     
     ElseIf KeyAscii = 115 Then
         Rem 's'
         WalkView -1
+        KeyboardLocked = True
         MouseLocked = True
     End If
 End Sub
@@ -734,6 +744,7 @@ Private Sub Form_MouseMove(Button As Integer, Shift As Integer, X As Single, Y A
             RotateView PlayerDirX, CameraLensX, -0.33
         End If
         MouseLocked = True
+        KeyboardLocked = True
     End If
 End Sub
 
@@ -853,6 +864,10 @@ Private Sub TimerAnimate_Timer()
     Next MobIter
 End Sub
 
+
+Private Sub TimerUnlockKeyboard_Timer()
+    KeyboardLocked = False
+End Sub
 
 Private Sub TimerUnlockMouse_Timer()
     MouseLocked = False
