@@ -33,5 +33,5 @@ map,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1
 map,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1
 map,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1
 map,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,1
-mobile,Maid,2,2,s_maid1.ico,s_maid2.ico,This is an extremely long line of text. It should wrap around and display as multiple lines in the adventure log. If it doesn't then something has gone wrong!
+mobile,Maid,2,2,s_maid1.ico,s_maid2.ico,<img:s_maid1.ico><green>This <black>is an extremely long line of text. It should wrap <i>around</i> and <violet><b>display</b> <black>as multiple lines in the adventure log. If it doesn't then something has gone <red><s>wrong</s><black>!
 warp,5,18,Cave.csv,4,2,7.912095E-02,0.996865,0.657931,-5.221983E-02
