@@ -1,18 +1,18 @@
 VERSION 4.00
 Begin VB.Form Log 
    Caption         =   "Log"
-   ClientHeight    =   2430
-   ClientLeft      =   2850
-   ClientTop       =   6585
+   ClientHeight    =   2445
+   ClientLeft      =   405
+   ClientTop       =   7020
    ClientWidth     =   8190
-   Height          =   2835
+   Height          =   2850
    Icon            =   "Log.frx":0000
-   Left            =   2790
+   Left            =   345
    LinkTopic       =   "Form1"
-   ScaleHeight     =   162
+   ScaleHeight     =   163
    ScaleMode       =   3  'Pixel
    ScaleWidth      =   546
-   Top             =   6240
+   Top             =   6675
    Width           =   8310
    Begin VB.PictureBox LogText 
       AutoRedraw      =   -1  'True
@@ -54,6 +54,9 @@ Attribute VB_Name = "Log"
 Attribute VB_Creatable = False
 Attribute VB_Exposed = False
 Option Explicit
+
+Dim LogHistoryText() As String
+Dim LogHistoryCount As Integer
 
 Public Function LogLineHeight(ByVal Line As String) As Integer
     Dim LineBreakCount As Integer
@@ -102,9 +105,7 @@ Public Sub LogPicture(PicturePath As String)
     
     InlinePicture.Picture = LoadPicture(PicturePath)
     LogText.PaintPicture InlinePicture.Picture, LineCurrentX, LogText.CurrentY
-    
-    Debug.Print InlinePicture.ScaleWidth
-    
+        
     LogText.CurrentX = LineCurrentX + InlinePicture.ScaleWidth
     
 End Sub
@@ -192,14 +193,21 @@ Public Sub LogWord(ByVal Word As String)
     End If
 End Sub
 
-Public Sub LogLine(ByVal Line As String, Color As Integer)
+Public Sub LogLine(ByVal Line As String, ByVal AddHistory As Boolean)
     Dim LineFirstWord As String
     
-    Rem TODO: Add logged line to in-memory text log.
+    Rem Add logged line to in-memory text log.
+    If AddHistory Then
+        ReDim Preserve LogHistoryText(LogHistoryCount)
+        LogHistoryText(LogHistoryCount) = Line
+        LogHistoryCount = LogHistoryCount + 1
+    End If
     
-    LogText.ForeColor = Color
+    LogText.ForeColor = vbBlack
     LogText.Font.Bold = False
-        
+    
+    LogScroll LogLineHeight(Line)
+    
     Rem Print each word in the line.
     While InStr(Line, Chr$(32))
         LineFirstWord = Left(Line, InStr(Line, Chr$(32)))
@@ -214,25 +222,35 @@ Public Sub LogLine(ByVal Line As String, Color As Integer)
 End Sub
 
 Public Sub LogTalk(Name As String, Message As String)
-    LogScroll LogLineHeight(Name & ": " & Message)
-    
     Rem Print the character talking's name in blue.
-    LogWord "<blue>" & Name & ": "
-    
     Rem Print what they're saying in black, allowing for line breaks.
-    LogLine Message, vbBlack
+    LogLine "<blue>" & Name & ":</blue> " & Message, True
 End Sub
 
 Private Sub Form_Load()
     View.MenuLog.Checked = True
     LogText.Picture = LogText.Image
+    LogLine "(Beginning)", True
 End Sub
 
 Public Sub LogDebug(Message As String)
     If View.MenuDebugLog.Checked Then
         LogScroll LogLineHeight(Message)
-        LogLine Message, vbRed
+        LogLine Message, True
     End If
+End Sub
+
+Private Sub Form_Resize()
+    Dim i As Integer
+    
+    Rem Resize, clear, and redraw the log.
+    LogText.Width = ScaleWidth - 1
+    LogText.Height = ScaleHeight - 1
+    LogText.Cls
+    
+    For i = 0 To LogHistoryCount - 1
+        LogLine LogHistoryText(i), False
+    Next i
 End Sub
 
 Private Sub Form_Unload(Cancel As Integer)
